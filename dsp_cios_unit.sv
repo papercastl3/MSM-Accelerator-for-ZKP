@@ -11,6 +11,7 @@ module dsp_cios_3stage (
 
     logic [47:0] P1; // 출력결과 저장 T[]
 
+    // C 값, A,B와 타이밍 맞추기 위한 1클락 밀기 
     logic [47:0] delayed_t_in;
     always_ff @(posedge clk) begin
         if (reset) delayed_t_in <= '0;
@@ -29,8 +30,7 @@ module dsp_cios_3stage (
         .RSTCTRL(reset), .RSTALUMODE(reset), .RSTALLCARRYIN(reset), .RSTINMODE(reset),
         .INMODE(5'b00000), .ACIN('0), .BCIN('0), .PCIN('0), .CARRYIN(1'b0)
     );
-
-    // 출력 연결 (총 레이턴시 10클럭)
+    // 출력 연결 
     assign p_out = P1;
 
 endmodule
