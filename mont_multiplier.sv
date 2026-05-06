@@ -7,7 +7,7 @@ module mont_multiplier (
     input  logic [254:0] X,
     input  logic [254:0] Y,
     output logic [254:0] result,
-    output logic         done
+    output logic         dones
 );
 
     // 파라미터 및 타입 정의 (Constants & Types)
