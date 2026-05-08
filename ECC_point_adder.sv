@@ -8,19 +8,26 @@ module ECC_point_adder(
     input  logic [254:0] x2,
     input  logic [254:0] y2,
     input  logic [254:0] z2,
+    output logic [254:0] x3,
+    output logic [254:0] y3,
+    output logic [254:0] z3,
     output logic [254:0] result,
     output logic         done
 );
-    // data input to mont_multiplier m1, m2
-    logic [254:0] input_1 [1:0]; //point coordinates
-    logic [254:0] input_2 [1:0];
+    // data input to mont_multiplier m1, m2, au
+    logic [254:0] input_1 [2:0]; //point coordinates
+    logic [254:0] input_2 [2:0];
 
-    // mont_mul control signal
+    // mont_mul, au control signal
     logic mont_mul_start [1:0];
+    logic au_start;
+    logic au_op_mode [1:0]
 
-    // output from mont_multiplier m1, m2
-    logic[254:0] mont_mul_result [1:0];
+    // output from mont_multiplier m1, m2, au
+    logic [254:0] mont_mul_result [1:0];
+    logic au_result [255:0];
     logic mont_mul_done [1:0];
+    logic au_done;
 
     // output save
     logic[254:0] reg [5:0];
@@ -50,6 +57,19 @@ module ECC_point_adder(
         .result(mont_mul_result[1]),
         .done(mont_mul_done[1])
     );
+
+    // Artithmetic unit (add and sub)
+    AddSub_256 au(
+        .clk(clk),
+        .reset(reset),
+        .start(au_start),
+        .op_mode(au_op_mode),
+        .X(input_1[2]),
+        .Y(input_2[2]),
+        .result(),
+        .done()
+    )
+
     
     // data input Select
     // 점들은 몽고메리 도메인으로 변환되었다고 가정
@@ -72,28 +92,42 @@ module ECC_point_adder(
              STAGE_1: begin
                 // mont_mul input
                 input_1[0] = z2; 
-                input_2[0] = reg[0]; //(z2)^2
+                input_2[0] = reg[0]; // (z2)^2
                 input_1[1] = x1; 
-                input_2[1] = reg[0]; //(z2)^2
-                // need subtracotor input
+                input_2[1] = reg[0]; // (z2)^2
+                // subtracotor input
+                au_op_mode = 2b'01; // Lazy_subtraction (뺄셈 결과가 음수면 + 2N)
+                input_1[2] = x2;
+                input_2[2] = mont_mul_done[1]; // U1
 
             end
             STAGE2: begin
                 // mont_mul input
                 input_1[0] = y1; 
-                input_2[0] = reg[1]; //(z2)^3
+                input_2[0] = reg[1]; // (z2)^3
                 input_1[1] = reg[3]; // H 
                 input_2[1] = reg[3]; // H
-                // need subtracotor input
+                // subtracotor input
+                au_op_mode = 2b'01; // Lazy_subtraction (뺄셈 결과가 음수면 + 2N)
+                input_1[2] = y2;
+                input_2[2] = mont_mul_done[0]; // S1
+
             end
             STAGE3: begin
-                input_1[0] = z2; 
-                input_2[0] = reg[0]; //(z2)^2
-                input_1[1] = x1; 
-                input_2[1] = reg[0]; //(z2)^2
-                 // need subtracotor input
+                // mont_mul input
+                input_1[0] = reg[0]; // (z2)^2
+                input_2[0] = reg[3]; // H
+                input_1[1] = reg[3]; // H 
+                input_2[1] = reg[4]; // (H)^2
+                // no subtraction
             end
             STAGE4: begin
+                // mont_mul input
+                input_1[0] = reg[2]; // U1
+                input_2[0] = reg[3]; // H
+                input_1[1] = reg[3]; // H 
+                input_2[1] = reg[4]; // (H)^2
+                // no subtraction
 
             end
             DONE: begin

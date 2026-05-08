@@ -4,12 +4,16 @@
  * 모듈명: AddSub_256 (Multi-Cycle Word-Serial Version)
  * 설계 의도: 256비트 병렬 연산기를 WORD_W비트 단위 멀티사이클 구조로 변경하여
  *           LUT 및 Carry Chain 면적을 약 1/(TOTAL_W/WORD_W) 수준으로 대폭 축소.
- *           단 1개의 WORD_W비트 공유 덧셈기로 모든 연산을 수행.
+ *           단 1개의 WORD_W비트 공유 덧셈기로 모든 연산을 수행.*
+ *
+ * base_reg : phase1에서 opmode에 의해 A+B, A-B, A-N 중 수행된 결과값 저장
+ *
  *
  * 연산 모드:
  * - 2'b00: Lazy Addition  (A + B mod 2N)
  * - 2'b01: Lazy Subtraction (A - B mod 2N)
- * - 2'b10: Final Subtraction (A mod N)
+ * - 2'b10: Lazy Subtraction (A - B mod 3N)  -- 추가함 !!!
+ * - 2'b11: Final Subtraction (A mod N)
  *
  * 파라미터:
  * - TOTAL_W: 전체 비트 폭 (기본 256)
@@ -39,6 +43,7 @@ module AddSub_256 #(
     // =========================================================================
     localparam logic [TOTAL_W-1:0] N     = 256'h2523648240000001BA344D80000000086121000000000013A700000000000013;
     localparam logic [TOTAL_W-1:0] TWO_N = N << 1;
+    localparam logic [TOTAL_W-1:0] THREE_N = N + TWO_N;
 
     localparam int N_WORDS  = TOTAL_W / WORD_W;
     localparam int IDX_W    = $clog2(N_WORDS);
@@ -84,15 +89,19 @@ module AddSub_256 #(
             S_PHASE1: begin
                 adder_a = a_reg[word_idx*WORD_W +: WORD_W];
                 case (op_reg)
-                    2'b00: begin
+                    2'b00: begin // A + b 을 위한 입력
                         adder_b_raw = b_reg[word_idx*WORD_W +: WORD_W];
                         do_sub      = 1'b0;
                     end
-                    2'b01: begin
+                    2'b01: begin // A - B 을 위한 입력 (mod 2N)
                         adder_b_raw = b_reg[word_idx*WORD_W +: WORD_W];
                         do_sub      = 1'b1;
                     end
-                    2'b10: begin
+                    2'b10: begin // A - B 을 위한 입력 (mod 3N)
+                        adder_b_raw = b_reg[word_idx*WORD_W +: WORD_W];
+                        do_sub      = 1'b1;
+                    end
+                    2'b11: begin // A - N 을 위한 입력
                         adder_b_raw = N[word_idx*WORD_W +: WORD_W];
                         do_sub      = 1'b1;
                     end
@@ -104,7 +113,7 @@ module AddSub_256 #(
             end
             S_PHASE2: begin
                 adder_a     = base_res[word_idx*WORD_W +: WORD_W];
-                adder_b_raw = TWO_N[word_idx*WORD_W +: WORD_W];
+                adder_b_raw = (op_reg == 2'b10) ? THREE_N[word_idx*WORD_W +: WORD_W] : TWO_N[word_idx*WORD_W +: WORD_W];
                 do_sub      = (op_reg == 2'b00);  // Lazy Add: -2N, Lazy Sub: +2N
             end
             default: ;
@@ -176,6 +185,7 @@ module AddSub_256 #(
                 // S_PHASE2: 범위 보정을 Word 단위로 순차 수행 (N_WORDS 사이클)
                 //   Lazy Add(00): base_res - 2N → result에 저장
                 //   Lazy Sub(01): base_res + 2N → result에 저장
+                //   Lazy Sub(11): base_res + 3N → result에 저장
                 //   sign_p1은 덮어쓰지 않고 보존 (Lazy Sub MUX 판별에 사용)
                 // ---------------------------------------------------------
                 S_PHASE2: begin
@@ -210,6 +220,13 @@ module AddSub_256 #(
                             if (!sign_p1) result <= base_res;
                         end
                         2'b10: begin
+                            // Lazy Sub: corr = base_res + 3N (Phase 2에서 result에 저장됨)
+                            // Phase 1 부호(sign_p1)로 판별
+                            // sign_p1=1 (음수) → corr 사용 (이미 result에 있음)
+                            // sign_p1=0 (양수) → base_res 사용
+                            if (!sign_p1) result <= base_res;
+                        end
+                        2'b11: begin
                             // Final Sub: Phase 2 Bypass
                             // sign_p1=1 (음수, A < N) → 원본 A 유지
                             // sign_p1=0 (양수, A >= N) → base_res(= A-N) 사용
