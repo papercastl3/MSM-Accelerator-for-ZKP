@@ -7,7 +7,7 @@ module mont_multiplier (
     input  logic [254:0] X,
     input  logic [254:0] Y,
     output logic [254:0] result,
-    output logic         dones
+    output logic         done
 );
 
     // 파라미터 및 타입 정의 (Constants & Types)
@@ -99,7 +99,7 @@ module mont_multiplier (
     // assign r_addr[2] = j_cnt[2];                                      // DSP_2은 T 읽기 주소가 j_cnt와 동일 (j_cnt : 0 ~ 15)
     // assign r_addr[3] = j_cnt[3] == '0 ? '0 : write_delay_dsp_3[3];    // DSP_0은 T 읽기 주소가 j_cnt - 4 와 동일 (j_cnt : 4 ~ 20)
 
-    // 💡 수정 후 (상태에 따른 읽기 주소 스위칭!)
+    // (상태에 따른 읽기 주소 스위칭!)
     assign r_addr[0] = (state == S_FINAL_SUB) ? {out_cnt[2:0], 2'b00} : j_cnt[0];
     assign r_addr[1] = (state == S_FINAL_SUB) ? {out_cnt[2:0], 2'b01} : (j_cnt[1] == '0 ? '0 : write_delay_dsp_1[3]);
     assign r_addr[2] = (state == S_FINAL_SUB) ? {out_cnt[2:0], 2'b10} : j_cnt[2];

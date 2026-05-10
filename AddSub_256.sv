@@ -168,7 +168,7 @@ module AddSub_256 #(
                         sign_p1  <= adder_out[WORD_W-1];
                         word_idx <= '0;
 
-                        if (op_reg == 2'b10) begin
+                        if (op_reg == 2'b11) begin
                             // Final Sub: Phase 2 Bypass → 바로 S_DONE
                             state <= S_DONE;
                         end else begin
@@ -185,7 +185,7 @@ module AddSub_256 #(
                 // S_PHASE2: 범위 보정을 Word 단위로 순차 수행 (N_WORDS 사이클)
                 //   Lazy Add(00): base_res - 2N → result에 저장
                 //   Lazy Sub(01): base_res + 2N → result에 저장
-                //   Lazy Sub(11): base_res + 3N → result에 저장
+                //   Lazy Sub(10): base_res + 3N → result에 저장
                 //   sign_p1은 덮어쓰지 않고 보존 (Lazy Sub MUX 판별에 사용)
                 // ---------------------------------------------------------
                 S_PHASE2: begin
