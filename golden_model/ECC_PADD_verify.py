@@ -161,6 +161,8 @@ x3,y3,z3 = mixed_add_lazy_sub(x1,y1,z1,x2,y2,z2)
 print(f"x3 : {hex(x3)}")
 print(f"y3 : {hex(y3)}")
 print(f"z3 : {hex(z3)}")
+0xfd78a65b768093fec32f28831dd6609240b7c0ade906d4e736bb2d93e76f918
+0xfd78a65b768093fec32f28831dd6609240b7c0ade906d4e736bb2d93e76f918
 
 # def rand_test(test_idx):
 #     """
