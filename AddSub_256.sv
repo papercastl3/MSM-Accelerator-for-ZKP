@@ -26,7 +26,7 @@
  */
 module AddSub_256 #(
     parameter int TOTAL_W = 256,
-    parameter int WORD_W  = 64
+    parameter int WORD_W  = 32
 )(
     input  logic                clk,
     input  logic                reset,
