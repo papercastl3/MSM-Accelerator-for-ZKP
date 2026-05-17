@@ -1,93 +1,106 @@
 `timescale 1ns/1ps
 
-module tb_ECC_point_adder;
+module tb_ECC_point_adder();
+    // 1. 파라미터 정의
+    localparam int NUM_TESTS = 100000;
+    localparam int TIMEOUT_CYCLES = 100000;
 
-    // 1. 신호 선언
-    logic         clk;
-    logic         reset;
-    logic         start;
+    // 2. 신호 선언
+    logic clk;
+    logic reset, start, done;
     logic [254:0] x1, y1, z1;
     logic [254:0] x2, y2, z2;
-    logic [254:0] x3, y3, z3; 
-    logic [254:0] result;
-    logic         done;
+    logic [254:0] x3, y3, z3;
 
-    // 2. DUT 인스턴스화
-    ECC_point_adder uut (
+    // 3. 메모리 배열 (Python에서 9개 변수를 한 줄에 출력하므로 총 2304비트)
+    logic [2303:0] m_data [0: NUM_TESTS-1]; 
+    
+    logic [254:0] r_x3;
+    logic [254:0] r_y3;
+    logic [254:0] r_z3;
+
+    // 4. DUT 연결
+    ECC_point_adder dut (
         .clk(clk),
         .reset(reset),
         .start(start),
         .x1(x1), .y1(y1), .z1(z1),
         .x2(x2), .y2(y2), .z2(z2),
-        .x3(x3), .y3(y3), .z3(z3), 
-        .done(done)
+        .x3(x3), .y3(y3), .z3(z3),
+        .done(done) 
     );
 
-    // 3. 클럭 생성 (주기: 10ns, 100MHz)
+    // 클럭 생성 (100MHz 테스트 기준. 400MHz는 #1.25)
+    always #5 clk = ~clk;
+
     initial begin
+        // Python 코드에서 만든 파일명으로 경로 수정 (상대경로로 변경 시 더 좋음)
+        // 파일 이름을 파이썬 스크립트 출력명(ecc_test_vectors.hex)으로 맞췄습니다.
+        $readmemh("C:/Users/jisun/Desktop/zkp_accel/golden_model/ecc_point_adder/ecc_test_vectors.hex", m_data); 
+        
+        // 초기화
         clk = 0;
-        forever #5 clk = ~clk;
-    end
-
-    // ★ Watchdog Timer (무한 루프 방지용)
-    initial begin
-        #5000000; // 500us 후에도 안끝나면 강제 종료 (필요 시 시간 조절)
-        $display("========================================");
-        $display(" [FAIL] Simulation TIMEOUT! (FSM Hang)");
-        $display("========================================");
-        $finish;
-    end
-
-    // 4. 테스트 시나리오
-    initial begin
-        // 초기값 설정
-        reset = 1;
         start = 0;
         x1 = '0; y1 = '0; z1 = '0;
         x2 = '0; y2 = '0; z2 = '0;
-
-        // Global Reset 대기 및 리셋 해제 (클럭 엣지에 동기화하여 해제하는 것이 좋음)
+        reset = 1;
         #100;
-        @(negedge clk); 
-        reset = 0; 
-        #20;
-
-        // 5. [중요] 실제 수학적으로 검증된 ECC Point 데이터 입력
-        // TODO: 아래 값들을 파이썬 레퍼런스 모델에서 뽑아낸 '몽고메리 도메인' 값으로 교체하세요.
-        @(posedge clk);
-        x1 = 255'h12345678; // P1_x (Montgomery)
-        y1 = 255'hABCDEF;   // P1_y (Montgomery)
-        z1 = 255'h1;        // 보통 Mixed Addition에서 Z1 = 1 (Montgomery Domain의 1 = R mod N)
         
-        x2 = 255'h87654321; // P2_X (Montgomery)
-        y2 = 255'hFEDCBA;   // P2_Y (Montgomery)
-        z2 = 255'h1;        // P2_Z (Montgomery)
-        
-        start = 1;  // 연산 시작 신호
+        reset = 1; 
+        repeat(10) @(posedge clk);
+        reset <= 0;
+        repeat(2) @(posedge clk);
 
-        @(posedge clk);
-        start = 0;  // start 신호는 1클럭만 유지
+        // 7. 테스트 루프
+        for (int i = 0; i < NUM_TESTS; i++) begin
+            @(posedge clk);
+            
+            // 💡 [핵심 수정] Python 출력(x1_y1_z1_x2_y2_z2_x3_y3_z3) 순서에 맞춰
+            // 오른쪽(LSB)부터 z3, y3, x3, z2, y2, x2, z1, y1, x1 순으로 거꾸로 읽어옵니다.
+            // 또한 256비트 블록에서 하위 255비트만 자릅니다 (logic [254:0]에 맞춤).
+            r_z3 <= m_data[i][0*256 +: 255]; // 오른쪽 끝 (z3)
+            r_y3 <= m_data[i][1*256 +: 255];
+            r_x3 <= m_data[i][2*256 +: 255]; 
+            
+            z2   <= m_data[i][3*256 +: 255];
+            y2   <= m_data[i][4*256 +: 255]; 
+            x2   <= m_data[i][5*256 +: 255]; 
+            
+            z1   <= m_data[i][6*256 +: 255];
+            y1   <= m_data[i][7*256 +: 255]; 
+            x1   <= m_data[i][8*256 +: 255]; // 왼쪽 끝 (x1)
 
-        // 6. 연산 완료 대기 (done 신호 감시)
-        wait(done);
-        
-        // 결과 출력 및 레퍼런스와 비교
+            start <= 1;
+            @(posedge clk);
+            start <= 0;
+
+            // Timeout 로직
+            fork
+                begin
+                    @(posedge done);
+                end
+                begin
+                    repeat(TIMEOUT_CYCLES) @(posedge clk);
+                    $display("[ERROR] Case %0d: Simulation Timeout!", i);
+                    $stop;
+                end
+            join_any
+            disable fork; 
+
+            // 결과 검증
+            if (x3 !== r_x3 || y3 !== r_y3 || z3 !== r_z3) begin
+                $display("[FAIL] Case %0d Mismatch!", i);
+                $display("  Actual: x=%h, y=%h, z=%h", x3, y3, z3);
+                $display("  Expect: x=%h, y=%h, z=%h", r_x3, r_y3, r_z3);
+                $stop;
+            end else begin
+                $display("[PASS] Case %0d", i);
+            end
+        end
+
         $display("========================================");
-        $display(" Calculation Finished Successfully! ");
+        $display("Verification Done. ALL %0d CASES PASSED!", NUM_TESTS);
         $display("========================================");
-        $display("X3: %h", x3);
-        $display("Y3: %h", y3);
-        $display("Z3: %h", z3);
-        // TODO: 파이썬에서 계산한 정답값과 X3, Y3, Z3가 일치하는지 확인하는 자동 체크 로직 추가 권장
-
-        #100;
         $finish;
     end
-
-    // VCD 파일 덤프
-    initial begin
-        $dumpfile("tb_ECC_point_adder.vcd");
-        $dumpvars(0, tb_ECC_point_adder);
-    end
-
 endmodule
