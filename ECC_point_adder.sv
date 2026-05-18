@@ -25,7 +25,7 @@ module ECC_point_adder(
     localparam M_T0 = 4'd7, M_T1 = 4'd8, M_T2 = 4'd9;
     localparam M_T3 = 4'd10, M_T4 = 4'd11, M_T5 = 4'd12, M_T6 = 4'd13;
 
-    localparam [254:0] N = 254'h2523648240000001BA344D80000000086121000000000013A700000000000013;
+    localparam [254:0] N = 254'h30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47;
 
     // ==========================================
     // 2. True Dual-Port BRAM
@@ -138,9 +138,23 @@ module ECC_point_adder(
                     done <= 1'b0;
                     h_is_zero_reg <= 1'b0; r_is_zero_reg <= 1'b0;
                     if (start) begin
-                        wea <= 1; addra <= M_X1; dina <= {1'b0, x1};
-                        web <= 1; addrb <= M_Y1; dinb <= {1'b0, y1};
-                        state <= ST_LOAD_0;
+                        if (z2 == 255'd0) begin // 예외 처리 
+                            x3 <= x1; 
+                            y3 <= y1; 
+                            z3 <= z1;
+                            state <= S_DONE;
+                        end 
+                        else if (z1 == 255'd0) begin // 예외 처리
+                            x3 <= x2; 
+                            y3 <= y2; 
+                            z3 <= z2;
+                            state <= S_DONE;
+                        end 
+                        else begin // 일반 처리
+                            wea <= 1; addra <= M_X1; dina <= {1'b0, x1};
+                            web <= 1; addrb <= M_Y1; dinb <= {1'b0, y1};
+                            state <= ST_LOAD_0;
+                        end
                     end
                 end
                 ST_LOAD_0: begin 

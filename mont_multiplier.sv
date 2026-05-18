@@ -16,8 +16,8 @@ module mont_multiplier (
     localparam W = 17;   
     localparam K = 15;   
     localparam SAVE_LAT = 3;    
-    localparam [16:0] N_prime = 17'h35E5; 
-    localparam [254:0] N = 254'h2523648240000001BA344D80000000086121000000000013A700000000000013;
+    localparam [16:0] N_prime = 17'h1d5e8; 
+    localparam [254:0] N = 254'h30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47;
 
     localparam D0_START = 0;
     localparam D1_START = 5;

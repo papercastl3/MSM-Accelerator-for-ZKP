@@ -2,7 +2,7 @@
 
 module tb_ECC_point_adder();
     // 1. 파라미터 정의
-    localparam int NUM_TESTS = 100000;
+    localparam int NUM_TESTS = 10000;
     localparam int TIMEOUT_CYCLES = 100000;
 
     // 2. 신호 선언
@@ -36,7 +36,7 @@ module tb_ECC_point_adder();
     initial begin
         // Python 코드에서 만든 파일명으로 경로 수정 (상대경로로 변경 시 더 좋음)
         // 파일 이름을 파이썬 스크립트 출력명(ecc_test_vectors.hex)으로 맞췄습니다.
-        $readmemh("C:/Users/jisun/Desktop/zkp_accel/golden_model/ecc_point_adder/ecc_test_vectors.hex", m_data); 
+        $readmemh("all_covering_test_vectors.hex", m_data);
         
         // 초기화
         clk = 0;
@@ -55,7 +55,7 @@ module tb_ECC_point_adder();
         for (int i = 0; i < NUM_TESTS; i++) begin
             @(posedge clk);
             
-            // 💡 [핵심 수정] Python 출력(x1_y1_z1_x2_y2_z2_x3_y3_z3) 순서에 맞춰
+            // ? [핵심 수정] Python 출력(x1_y1_z1_x2_y2_z2_x3_y3_z3) 순서에 맞춰
             // 오른쪽(LSB)부터 z3, y3, x3, z2, y2, x2, z1, y1, x1 순으로 거꾸로 읽어옵니다.
             // 또한 256비트 블록에서 하위 255비트만 자릅니다 (logic [254:0]에 맞춤).
             r_z3 <= m_data[i][0*256 +: 255]; // 오른쪽 끝 (z3)
@@ -88,7 +88,8 @@ module tb_ECC_point_adder();
             disable fork; 
 
             // 결과 검증
-            if (x3 !== r_x3 || y3 !== r_y3 || z3 !== r_z3) begin
+            if ($isunknown(x3) || $isunknown(y3) || $isunknown(z3) ||
+            x3 !== r_x3 || y3 !== r_y3 || z3 !== r_z3) begin
                 $display("[FAIL] Case %0d Mismatch!", i);
                 $display("  Actual: x=%h, y=%h, z=%h", x3, y3, z3);
                 $display("  Expect: x=%h, y=%h, z=%h", r_x3, r_y3, r_z3);
@@ -103,4 +104,4 @@ module tb_ECC_point_adder();
         $display("========================================");
         $finish;
     end
-endmodule
+endmodule  

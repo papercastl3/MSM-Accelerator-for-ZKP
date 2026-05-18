@@ -14,8 +14,9 @@ module tb_addsub_256;
     logic [255:0] result;
     logic         done;
 
+
     // 상수 정의 (골든 모델 비교용)
-    localparam logic [255:0] N     = 256'h2523648240000001BA344D80000000086121000000000013A700000000000013;
+    localparam logic [255:0] N     = 256'h30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47;
     localparam logic [255:0] TWO_N = N << 1;
 
     // 테스트 카운터

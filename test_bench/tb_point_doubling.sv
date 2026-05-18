@@ -12,7 +12,7 @@ module tb_point_doubling;
     // =========================================================================
     // Parameters
     // =========================================================================
-    localparam [254:0] N = 255'h2523648240000001BA344D80000000086121000000000013A700000000000013;
+    localparam [254:0] N = 255'h30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47;
     localparam int NUM_RANDOM_TESTS = 10;
     localparam int CLK_PERIOD = 10;     // 10ns, 100MHz
     localparam int TIMEOUT_CYCLES = 50000;  // Max wait cycles
