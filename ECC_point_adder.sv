@@ -25,7 +25,7 @@ module ECC_point_adder(
     localparam M_T0 = 4'd7, M_T1 = 4'd8, M_T2 = 4'd9;
     localparam M_T3 = 4'd10, M_T4 = 4'd11, M_T5 = 4'd12, M_T6 = 4'd13;
 
-    localparam [254:0] N = 254'h30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47;
+    localparam [254:0] N = 254'h2523648240000001BA344D80000000086121000000000013A700000000000013;
 
     // ==========================================
     // 2. True Dual-Port BRAM
@@ -119,7 +119,7 @@ module ECC_point_adder(
         S_DONE
     } state_e;
 
-    state_e state;
+   state_e state;
 
     always_ff @(posedge clk) begin
         if (reset) begin
@@ -561,7 +561,7 @@ module ECC_point_adder(
                 S_O_F0: begin addra <= M_T2; addrb <= M_T1; state <= S_O_F1; end
                 S_O_F1: begin addra <= M_T0; state <= S_O_WX; end
                 S_O_WX: state <= S_O_L0;
-                // 🌟 [최종 수정 완료] S_O_L0의 무한 루프 늪을 S_O_L1로 완벽하게 탈출!
+                // ? [최종 수정 완료] S_O_L0의 무한 루프 늪을 S_O_L1로 완벽하게 탈출!
                 S_O_L0: begin x3 <= douta[254:0]; y3 <= doutb[254:0]; state <= S_O_L1; end 
                 S_O_L1: begin z3 <= douta[254:0]; state <= S_DONE; end
 

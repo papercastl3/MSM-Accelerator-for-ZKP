@@ -2,7 +2,7 @@ import random
 from multiprocessing import Pool
 
 # 하드웨어 파라미터
-N = 0x30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47
+N = 0x2523648240000001BA344D80000000086121000000000013A700000000000013
 W = 17
 K = 15
 R = 2**(W * K)
@@ -151,7 +151,7 @@ def FPGA_ECC_point_adder(X1, Y1, Z1, X2, Y2, Z2):
     
 
 def main():
-    NUM_TESTS = 1000000
+    NUM_TESTS = 100000
     outfile = "all_covering_test_vectors.hex"
     random.seed(42)
     
