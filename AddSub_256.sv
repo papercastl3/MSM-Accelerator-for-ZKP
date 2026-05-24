@@ -7,6 +7,7 @@
  * 2. [MUX 트리 해체] 변수 인덱싱을 고정 [31:0] 단면 참조 구조로 리모델링하여 Logic Level을 8단계에서 2단계로 축소.
  * 3. [상수 ROM 압축] N, 2N, 3N 시프트 레지스터(768비트)를 전면 삭제하고, 하드웨어 상수를 직접 인덱싱하여 LUT-ROM 진리표로 완벽 압축.
  * 4. [데이터 무결성] 8사이클의 정확한 32비트 우측 원형 회전(Rotation)을 통해 연산 완료 후 원본 데이터 정렬 완벽 복원.
+ * 5. [부호 판별 수정] 256비트 전체 스케일 사용 시 MSB(최상위 비트) 함정을 방지하기 위해 Carry-Out 기반의 True Borrow 판별 적용.
  */
 module AddSub_256 #(
     parameter int TOTAL_W = 256,
@@ -25,7 +26,7 @@ module AddSub_256 #(
     // =========================================================================
     // 1. 암호학적 프로토콜 상수 선언 (BN254 베이스 필드)
     // =========================================================================
-    localparam logic [TOTAL_W-1:0] N       = 256'h2523648240000001BA344D80000000086121000000000013A700000000000013;
+    localparam logic [TOTAL_W-1:0] N       = 256'h30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47;
     localparam logic [TOTAL_W-1:0] TWO_N   = N << 1;
     localparam logic [TOTAL_W-1:0] THREE_N = N + TWO_N;
 
@@ -49,7 +50,7 @@ module AddSub_256 #(
     logic                carry_ff;     // 워드 간 고속 캐리 전파 플립플롭
     logic [IDX_W-1:0]    word_idx;     // 루프 카운터 (Fanout 해제 완료)
     logic [1:0]          op_reg;       
-    logic                sign_p1;      // Phase 1 결과의 최종 부호비트(MSB) 저장 레지스터
+    logic                sign_p1;      // Phase 1 결과의 Borrow(언더플로우) 래치용 플래그
 
     // =========================================================================
     // 3. 조합 논리: 32비트 고정 슬롯 공유 패브릭 연산기
@@ -131,7 +132,8 @@ module AddSub_256 #(
                     carry_ff <= adder_out[WORD_W];
 
                     if (word_idx == IDX_W'(N_WORDS - 1)) begin
-                        sign_p1  <= adder_out[WORD_W-1]; // 최종 255번째 비트의 부호 래치
+                        // [수정된 부분] MSB 비트 대신 가산기 최상단 Carry-Out을 반전시켜 확실한 Borrow 판독
+                        sign_p1  <= ~adder_out[WORD_W];
                         word_idx <= '0;
                         
                         if (op_reg == 2'b11) begin
@@ -164,17 +166,17 @@ module AddSub_256 #(
                 S_DONE: begin
                     case (op_reg)
                         2'b00: begin // Lazy Add 조건 분기
-                            // result에 미리 계산된 base_res - 2N 의 최상위 MSB(부호비트)로 판별
-                            if (result[TOTAL_W-1]) result <= base_res;
+                            // [수정된 부분] Phase 2 결과의 MSB가 아닌 Carry-Out(~carry_ff)을 통해 Borrow 발생 검사
+                            if (~carry_ff) result <= base_res;
                         end
                         
                         2'b01, 2'b10: begin // Lazy Sub 조건 분기
-                            // Phase 1 결과 부호가 양수(!sign_p1)였다면 보정 불필요하므로 원본 base_res 복원
+                            // Phase 1에서 Borrow가 발생하지 않았다면(!sign_p1) 보정 불필요하므로 원본 base_res 복원
                             if (!sign_p1) result <= base_res;
                         end
                         
                         2'b11: begin // Final Sub 조건 분기
-                            // A - N < 0 (sign_p1=1) 이면 완벽히 회전 원복된 원본 A(a_reg) 유지, 양수면 base_res 출력
+                            // A - N < 0 (Borrow 발생, sign_p1=1) 이면 완벽히 회전 원복된 원본 A(a_reg) 유지, 양수면 base_res 출력
                             result <= sign_p1 ? a_reg : base_res;
                         end
                         default: result <= base_res;

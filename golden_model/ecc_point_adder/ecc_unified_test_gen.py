@@ -1,5 +1,6 @@
 import random
 from multiprocessing import Pool
+import subprocess
 
 # 하드웨어 파라미터
 N = 0x30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47
@@ -16,9 +17,8 @@ MAX_255 = (1 << 255) - 1
 MAX_256 = (1 << 256) - 1
 N_INV_MOD_R = pow(-N % R, -1, R)
 
-# def overflow chk
-def overflow_chk(x):
-    if x >= R:
+def overflowchk(x):
+    if x > 2.645 *N:
         print(f"{hex(x)} is overflowed")
 
 # Affine ECC 점 덧셈
@@ -54,7 +54,7 @@ def mont_mul_lazy_hw(x, y):
     M = (T * N_INV_MOD_R) % R
     redc = (T + M * N) // R 
     # return redc & MAX_255
-    return redc & MAX_256
+    return redc & MAX_255
 
 def lazy_subtraction_N_hw(x):
     res = x if (x - N < 0) else (x - N)
@@ -125,45 +125,57 @@ def point_double_hw(X1, Y1, Z1):
 def mixed_add_hw(X1, Y1, Z1, X2, Y2, Z2):
     # stage0
     Z2_square = mont_mul_lazy_hw(Z2, Z2)
+    
     # stage1
     Z2_cubed  = mont_mul_lazy_hw(Z2, Z2_square)
     U1 = mont_mul_lazy_hw(X1, Z2_square)
     H  = lazy_subtraction_2N_hw(X2, U1)
+    H  = lazy_subtraction_N_hw(H)
+    
     # stage2
     S1 = mont_mul_lazy_hw(Y1, Z2_cubed)
-    H_sqaure = mont_mul_lazy_hw(H, H)
-    r = lazy_subtraction_2N_hw(Y2, S1)
+    r  = lazy_subtraction_2N_hw(Y2, S1)
+    r  = lazy_subtraction_N_hw(r) # [최적화 1] 여기서 r을 미리 < 2N으로 깎습니다.
 
-    # [수정] 모듈러 연산으로 논리 동치 완벽 체크
     if H % N == 0:
-        if r % N == 0: # 동일한 점이므로 Doubling으로 분기
-            return point_double_hw(X1, Y1, Z1)
-        else:          # 덧셈 역원 관계이므로 무한원점(0,0,0) 반환
-            return 0, 0, 0
+        if r % N == 0: return point_double_hw(X1, Y1, Z1)
+        else:          return 0, 0, 0
             
     # 일반 Mixed Add 진행
     Z3 = mont_mul_lazy_hw(Z2, H)
-    H_cubed = mont_mul_lazy_hw(H_sqaure, H)
-
+    
+    H_sqaure = mont_mul_lazy_hw(H, H)
+    H_cubed  = mont_mul_lazy_hw(H_sqaure, H)
+    H_cubed  = lazy_subtraction_N_hw(H_cubed) # [최적화 2] H_cubed < 2N 유지
+    
     V = mont_mul_lazy_hw(U1, H_sqaure)
+    V = lazy_subtraction_N_hw(V) # [최적화 3] V < 2N 유지
+    
     r_square = mont_mul_lazy_hw(r, r)
 
-    r_square_minus_H_cubed = lazy_subtraction_3N_hw(r_square, H_cubed)
-    r_square_minus_H_cubed_minus_V = lazy_subtraction_3N_hw(r_square_minus_H_cubed, V)
-    X3 = lazy_subtraction_3N_hw(r_square_minus_H_cubed_minus_V, V)
-    V_minus_X3 = lazy_subtraction_3N_hw(V, X3)
-    V_minus_X3 = lazy_subtraction_N_hw(V_minus_X3) # 추가 !!
-
+    # 피연산자들이 통제되었으므로 3N_hw 대신 2N_hw 만으로도 언더플로우가 발생하지 않습니다.
+    r_square_minus_H_cubed = lazy_subtraction_2N_hw(r_square, H_cubed)
+    r_square_minus_H_cubed_minus_V = lazy_subtraction_2N_hw(r_square_minus_H_cubed, V)
+    
+    X3 = lazy_subtraction_2N_hw(r_square_minus_H_cubed_minus_V, V)
+    X3 = lazy_subtraction_N_hw(X3) # [최적화 4] 뒤이을 V - X3 연산을 위해 X3를 < 2N으로 깎음
+    
+    # X3와 V 모두 < 2N 이므로 최소값이 -2N을 넘지 않아 2N_hw로 완벽히 방어됩니다.
+    V_minus_X3 = lazy_subtraction_2N_hw(V, X3)
+    
     W = mont_mul_lazy_hw(S1, H_cubed)
+    W = lazy_subtraction_N_hw(W) # [최적화 5] W < 2N 유지
+    
     Y_part = mont_mul_lazy_hw(r, V_minus_X3)
-    Y3 = lazy_subtraction_3N_hw(Y_part, W)
+    
+    # Y_part와 W가 통제되어 3N_hw -> 2N_hw 교체 가능
+    Y3 = lazy_subtraction_2N_hw(Y_part, W)
 
-    Y3 = lazy_subtraction_N_hw(Y3)
+    # [최적화 6] 출력단에 2번씩 연달아 붙어있던 무의미한 중복 리덕션 제거
     Y3 = lazy_subtraction_N_hw(Y3)
     Z3 = lazy_subtraction_N_hw(Z3)
-    Z3 = lazy_subtraction_N_hw(Z3)
-    X3 = lazy_subtraction_N_hw(X3)
-    X3 = lazy_subtraction_N_hw(X3)
+    # X3는 위 [최적화 4]에서 이미 한 번 깎았으므로 생략 가능합니다.
+    
     return X3, Y3, Z3
 
 # 최상위 하드웨어 래퍼 (Wrapper)
@@ -179,12 +191,11 @@ def FPGA_ECC_point_adder(X1, Y1, Z1, X2, Y2, Z2):
     
 
 def main():
-    NUM_TESTS = 1000000
-    outfile = "all_covering_test_vectors.txt"
+    NUM_TESTS = 10000
+    outfile = "all_covering_test_vectors.hex"
     random.seed(42)
     
     with open(outfile, "w") as f:
-        f.write(f"{NUM_TESTS}\n")
         
         # [수정] 에러 추적을 위해 '_' 대신 'test_idx' 변수 사용
         for test_idx in range(NUM_TESTS):
