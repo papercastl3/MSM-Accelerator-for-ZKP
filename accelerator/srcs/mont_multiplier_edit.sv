@@ -2,7 +2,7 @@
 
 module mont_multiplier (
     input  logic         clk,
-    input  logic         reset,
+    input  logic         rst_n,
     input  logic         start,
     input  logic [254:0] X,
     input  logic [254:0] Y,
@@ -11,13 +11,13 @@ module mont_multiplier (
 );
 
     // =========================================================================
-    // 상수 및 파라미터 정의
+    // Constants and Parameters
     // =========================================================================
     localparam W = 17;   
     localparam K = 15;   
     localparam SAVE_LAT = 3;    
-    localparam [16:0] N_prime = 17'h35E5; 
-    localparam [254:0] N = 254'h2523648240000001BA344D80000000086121000000000013A700000000000013;
+    localparam [16:0] N_prime = 17'h6389; 
+    localparam [254:0] N = 254'h30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47;
 
     localparam D0_START = 0;
     localparam D1_START = 5;
@@ -30,9 +30,12 @@ module mont_multiplier (
     } state_e;
 
     // =========================================================================
-    // 내부 신호 선언
+    // Internal Signal Declarations
     // =========================================================================
     (* max_fanout = "20" *) state_e       state;
+    // [Fanout Split] FSM state manual replication (Path 5,6 fix -- DSP start path isolation)
+    (* dont_touch = "true" *) state_e       state_dsp;   // for dsp_start only
+    (* dont_touch = "true" *) state_e       state_mem;   // for data rotation + memory write only
     (* max_fanout = "10" *) logic [8:0]   local_cnt;
     
     logic [5:0] j_cnt [3:0];
@@ -46,28 +49,28 @@ module mont_multiplier (
     logic [2:0]   out_cnt;
     logic         dsp_active [3:0];
     wire          dsp_start  [3:0];
-
-    // 데이터 회전 레지스터
-    logic [254:0] x_rot; 
-    logic [254:0] n_rot_1;
-    logic [254:0] n_rot_3;
+    // Data rotation registers
+    // x_rot was split per multiplier lane.
+    // This preserves the original word sequence while removing the shared
+    // 255-bit CE path driven by (dsp_active[0]/[2] && j_cnt < K).
+    (* keep = "true", equivalent_register_removal = "no", max_fanout = "32" *) logic [254:0] x_rot_0;
+    (* keep = "true", equivalent_register_removal = "no", max_fanout = "32" *) logic [254:0] x_rot_2;
+    (* keep = "true", equivalent_register_removal = "no", max_fanout = "32" *) logic [254:0] n_rot_1;
+    (* keep = "true", equivalent_register_removal = "no", max_fanout = "32" *) logic [254:0] n_rot_3;
 
     logic [W-1:0] y_word [K-1:0];
     logic [W-1:0] m_val  [1:0];
-
-    // DSP 입출력 포트
+    // DSP I/O ports
     logic [29:0]  dsp_a [3:0];
     logic [17:0]  dsp_b [3:0];
     logic [47:0]  dsp_c [3:0];
     logic [47:0]  dsp_p [3:0];
-
-    // 메모리 뱅크
+    // Memory banks
     (* ram_style = "distributed" *) logic [W-1:0] t_bank_0 [7:0];
     (* ram_style = "distributed" *) logic [W-1:0] t_bank_1 [7:0];
     (* ram_style = "distributed" *) logic [W-1:0] t_bank_2 [7:0];
     (* ram_style = "distributed" *) logic [W-1:0] t_bank_3 [7:0];
-
-    // 지연선 (Shift Registers)
+    // Delay lines (Shift Registers)
     (* srl_style = "srl_reg" *) logic [5:0] write_delay_dsp_0 [2:0];
     (* srl_style = "srl_reg" *) logic [5:0] write_delay_dsp_1 [7:0];
     (* srl_style = "srl_reg" *) logic [5:0] write_delay_dsp_2 [2:0];
@@ -76,17 +79,27 @@ module mont_multiplier (
     (* max_fanout = "16" *) logic [4:0] w_addr_reg [3:0];
     (* max_fanout = "16" *) logic [4:0] r_addr_delay_1_reg;
     (* max_fanout = "16" *) logic [4:0] r_addr_delay_3_reg;
+    // [Fanout Split] w_addr_reg[1] manual replication (Path 1,2,4,7,8,10 fix)
+    (* dont_touch = "true" *) logic [4:0] w_addr_reg_1_forBank01;  // for t_bank_0, t_bank_1
+    (* dont_touch = "true" *) logic [4:0] w_addr_reg_1_forBank23;  // for t_bank_2, t_bank_3
 
     wire  [4:0]   w_addr        [3:0]; 
     wire  [4:0]   r_addr        [3:0]; 
-    wire          valid_write_0, valid_write_1, valid_write_2, valid_write_3;
+    wire          valid_write_0, valid_write_2, valid_write_3;
+    // [Fanout Split] valid_write_1 also replicated per bank group
+    (* dont_touch = "true" *) wire valid_write_1_forBank01;
+    (* dont_touch = "true" *) wire valid_write_1_forBank23;
     logic [W-1:0] t_read        [3:0]; 
-
-    //  [신규] 상태 레지스터(Fanout 80)를 대체할 초경량 플래그 (Fanout 4)
+    //  [New] Lightweight flag to replace state register (Fanout 80 -> Fanout 4)
     (* max_fanout = "4" *) logic final_sub_en;
+    // [Timing Opt v2] Pre-decoded write address bank select + validity (critical path LUT reduction: 5 -> 3 levels)
+    logic w_addr_0_in_range, w_addr_2_in_range, w_addr_3_in_range;
+    logic [3:0] w_addr_0_bank_oh, w_addr_2_bank_oh, w_addr_3_bank_oh;
+    (* dont_touch = "true" *) logic w_addr_1_in_range_01, w_addr_1_in_range_23;
+    (* dont_touch = "true" *) logic [3:0] w_addr_1_bank_oh_01, w_addr_1_bank_oh_23;
 
     // =========================================================================
-    // Wrap-around 완벽 예측 (수학 무결성 유지)
+    // Wrap-around Perfect Prediction (mathematical integrity preserved)
     // =========================================================================
     wire [5:0] nxt_j0 = (j_cnt[0] == j_max) ? '0 : (j_cnt[0] + 1);
     wire [5:0] nxt_j1 = (j_cnt[1] == j_max) ? '0 : (j_cnt[1] + 1);
@@ -94,7 +107,7 @@ module mont_multiplier (
     wire [5:0] nxt_j3 = (j_cnt[3] == j_max) ? '0 : (j_cnt[3] + 1);
 
     // =========================================================================
-    // 파이프라이닝 제어 신호 사전 계산
+    // Pipelining Control Signal Pre-computation
     // =========================================================================
     logic [4:0] r_addr_0_run, r_addr_2_run;
 
@@ -150,7 +163,7 @@ module mont_multiplier (
     end
 
     // =========================================================================
-    // 인스턴스 및 와이어 할당
+    // Instances and Wire Assignments
     // =========================================================================
     generate
         for (genvar g = 0; g < K; g++) begin : gen_split
@@ -158,12 +171,11 @@ module mont_multiplier (
         end
     endgenerate
 
-    assign dsp_start[0] = (state == S_RUNNING) && (local_cnt == D0_START);
-    assign dsp_start[1] = (state == S_RUNNING) && (local_cnt == D1_START);
-    assign dsp_start[2] = (state == S_RUNNING) && (local_cnt == D2_START);
-    assign dsp_start[3] = (state == S_RUNNING) && (local_cnt == D3_START);
-
-    // 🌟 [핵심] 무거운 state 검사 대신 초경량 final_sub_en 사용으로 딜레이 극단적 단축
+    assign dsp_start[0] = (state_dsp == S_RUNNING) && (local_cnt == D0_START);
+    assign dsp_start[1] = (state_dsp == S_RUNNING) && (local_cnt == D1_START);
+    assign dsp_start[2] = (state_dsp == S_RUNNING) && (local_cnt == D2_START);
+    assign dsp_start[3] = (state_dsp == S_RUNNING) && (local_cnt == D3_START);
+    // [Key] Use lightweight final_sub_en instead of heavy state check for extreme delay reduction
     assign r_addr[0] = final_sub_en ? {out_cnt[2:0], 2'b00} : r_addr_0_run;
     assign r_addr[1] = final_sub_en ? {out_cnt[2:0], 2'b01} : (dsp1_ph_zero ? 5'd0 : r_addr_delay_1_reg);
     assign r_addr[2] = final_sub_en ? {out_cnt[2:0], 2'b10} : r_addr_2_run;
@@ -174,16 +186,18 @@ module mont_multiplier (
     assign w_addr[2] = w_addr_reg[2]; 
     assign w_addr[3] = w_addr_reg[3]; 
 
-    assign valid_write_0 = dsp_active[0] && (w_addr[0] <= 5'd16) && dsp0_valid;
-    assign valid_write_1 = dsp_active[1] && (w_addr[1] <= 5'd16) && dsp1_valid;
-    assign valid_write_2 = dsp_active[2] && (w_addr[2] <= 5'd16) && dsp2_valid;
-    assign valid_write_3 = dsp_active[3] && (w_addr[3] <= 5'd16) && dsp3_valid;
+    // [Timing Opt v2] valid_write uses pre-decoded in_range instead of combinational <= 16
+    assign valid_write_0 = dsp_active[0] && w_addr_0_in_range && dsp0_valid;
+    assign valid_write_1_forBank01 = dsp_active[1] && w_addr_1_in_range_01 && dsp1_valid;
+    assign valid_write_1_forBank23 = dsp_active[1] && w_addr_1_in_range_23 && dsp1_valid;
+    assign valid_write_2 = dsp_active[2] && w_addr_2_in_range && dsp2_valid;
+    assign valid_write_3 = dsp_active[3] && w_addr_3_in_range && dsp3_valid;
 
     generate
         for (genvar d = 0; d < 4; d++) begin : gen_dsp
             dsp_cios_3stage dsp_inst (
                 .clk   (clk),
-                .reset (reset),
+                .rst_n (rst_n),
                 .x_in  (dsp_a[d]),
                 .y_in  (dsp_b[d]),
                 .t_in  (dsp_c[d]),
@@ -193,7 +207,7 @@ module mont_multiplier (
     endgenerate
 
     // =========================================================================
-    // 조합 논리 회로 (state 변수 완전 제거로 로직 독립 달성!)
+    // Combinational Logic (state variable completely removed for logic independence!)
     // =========================================================================
     always_comb begin
         for(int d=0; d<4; d++) begin
@@ -205,12 +219,11 @@ module mont_multiplier (
             endcase
             dsp_a[d] = '0; dsp_b[d] = '0; dsp_c[d] = '0;
         end
-
-        // [핵심] if (state == S_RUNNING) 제거! 
-        // 사전 계산 플래그들이 알아서 Idle 상태를 방어하므로 FSM 껍데기가 필요 없습니다.
+        // [Key] if (state == S_RUNNING) removed!
+        // Pre-computed flags handle Idle state guard, so FSM wrapper is unnecessary.
         // DSP_0
         if (dsp0_ph_mult) begin
-            dsp_a[0] = {{(30-W){1'b0}}, x_rot[W-1:0]}; 
+            dsp_a[0] = {{(30-W){1'b0}}, x_rot_0[W-1:0]}; 
             dsp_b[0] = {{(18-W){1'b0}}, y_word[i_cnt[0]]}; 
             dsp_c[0] = {{(48-W){1'b0}}, t_read[0]}; 
         end else if (dsp0_ph_end) begin
@@ -233,7 +246,7 @@ module mont_multiplier (
 
         // DSP_2
         if (dsp2_ph_mult) begin
-            dsp_a[2] = {{(30-W){1'b0}}, x_rot[W-1:0]}; 
+            dsp_a[2] = {{(30-W){1'b0}}, x_rot_2[W-1:0]}; 
             dsp_b[2] = {{(18-W){1'b0}}, y_word[i_cnt[1]]}; 
             dsp_c[2] = {{(48-W){1'b0}}, t_read[2]}; 
         end else if (dsp2_ph_end) begin
@@ -256,28 +269,39 @@ module mont_multiplier (
     end
 
     // =========================================================================
-    // 순차 논리 회로 - 데이터 회전 동기화
+    // Sequential Logic - Data Rotation Synchronization
     // =========================================================================
     always_ff @(posedge clk) begin
-        if (state == S_IDLE && start) begin
-            x_rot   <= X; 
+        if (state_mem == S_IDLE && start) begin
+            x_rot_0 <= X;
+            x_rot_2 <= X;
             n_rot_1 <= N;
             n_rot_3 <= N;
-        end 
-        else if (state == S_RUNNING) begin
-            if ((dsp_active[0] && j_cnt[0] < K) || (dsp_active[2] && j_cnt[2] < K))
-                x_rot <= {x_rot[W-1:0], x_rot[254:W]}; 
-                
-            if (dsp_active[1] && j_cnt[1] >= 4 && j_cnt[1] < 19)
+        end else begin
+            // Rotate exactly when the corresponding registered DSP phase consumes
+            // the current low W-bit word. No extra pipeline cycle is inserted.
+            //
+            // Original x_rot enable:
+            //   (dsp_active[0] && j_cnt[0] < K) ||
+            //   (dsp_active[2] && j_cnt[2] < K)
+            // was functionally equivalent to the two registered phase enables
+            // below, but it formed a wide CE path into x_rot_reg[*].
+            if (dsp0_ph_mult)
+                x_rot_0 <= {x_rot_0[W-1:0], x_rot_0[254:W]};
+
+            if (dsp2_ph_mult)
+                x_rot_2 <= {x_rot_2[W-1:0], x_rot_2[254:W]};
+
+            if (dsp1_ph_n)
                 n_rot_1 <= {n_rot_1[W-1:0], n_rot_1[254:W]};
-                
-            if (dsp_active[3] && j_cnt[3] >= 4 && j_cnt[3] < 19)
+
+            if (dsp3_ph_n)
                 n_rot_3 <= {n_rot_3[W-1:0], n_rot_3[254:W]};
         end
     end
 
     // =========================================================================
-    // 순차 논리 회로 - 지연선 업데이트
+    // Sequential Logic - Delay Line Update
     // =========================================================================
     always_ff @(posedge clk) begin
         if (dsp_active[0]) begin 
@@ -305,17 +329,53 @@ module mont_multiplier (
         w_addr_reg[1] <= write_delay_dsp_1[6][4:0];
         w_addr_reg[2] <= write_delay_dsp_2[1][4:0];
         w_addr_reg[3] <= write_delay_dsp_3[6][4:0];
+        // Replica simultaneous update (same source, physically separated)
+        w_addr_reg_1_forBank01 <= write_delay_dsp_1[6][4:0];
+        w_addr_reg_1_forBank23 <= write_delay_dsp_1[6][4:0];
 
         r_addr_delay_1_reg <= write_delay_dsp_1[2][4:0]; 
         r_addr_delay_3_reg <= write_delay_dsp_3[2][4:0]; 
+
+        // [Timing Opt v2] Pre-decode bank select + validity from write_delay source
+        // Same source as w_addr_reg, but decodes bank bits and range into single-bit registers
+        // This removes the combinational bank comparison and <= 16 check from the critical path
+        w_addr_0_in_range    <= (write_delay_dsp_0[1][4:0] <= 5'd16);
+        w_addr_0_bank_oh[0]  <= (write_delay_dsp_0[1][1:0] == 2'b00);
+        w_addr_0_bank_oh[1]  <= (write_delay_dsp_0[1][1:0] == 2'b01);
+        w_addr_0_bank_oh[2]  <= (write_delay_dsp_0[1][1:0] == 2'b10);
+        w_addr_0_bank_oh[3]  <= (write_delay_dsp_0[1][1:0] == 2'b11);
+
+        w_addr_1_in_range_01 <= (write_delay_dsp_1[6][4:0] <= 5'd16);
+        w_addr_1_in_range_23 <= (write_delay_dsp_1[6][4:0] <= 5'd16);
+        w_addr_1_bank_oh_01[0] <= (write_delay_dsp_1[6][1:0] == 2'b00);
+        w_addr_1_bank_oh_01[1] <= (write_delay_dsp_1[6][1:0] == 2'b01);
+        w_addr_1_bank_oh_01[2] <= (write_delay_dsp_1[6][1:0] == 2'b10);
+        w_addr_1_bank_oh_01[3] <= (write_delay_dsp_1[6][1:0] == 2'b11);
+        w_addr_1_bank_oh_23[0] <= (write_delay_dsp_1[6][1:0] == 2'b00);
+        w_addr_1_bank_oh_23[1] <= (write_delay_dsp_1[6][1:0] == 2'b01);
+        w_addr_1_bank_oh_23[2] <= (write_delay_dsp_1[6][1:0] == 2'b10);
+        w_addr_1_bank_oh_23[3] <= (write_delay_dsp_1[6][1:0] == 2'b11);
+
+        w_addr_2_in_range    <= (write_delay_dsp_2[1][4:0] <= 5'd16);
+        w_addr_2_bank_oh[0]  <= (write_delay_dsp_2[1][1:0] == 2'b00);
+        w_addr_2_bank_oh[1]  <= (write_delay_dsp_2[1][1:0] == 2'b01);
+        w_addr_2_bank_oh[2]  <= (write_delay_dsp_2[1][1:0] == 2'b10);
+        w_addr_2_bank_oh[3]  <= (write_delay_dsp_2[1][1:0] == 2'b11);
+
+        w_addr_3_in_range    <= (write_delay_dsp_3[6][4:0] <= 5'd16);
+        w_addr_3_bank_oh[0]  <= (write_delay_dsp_3[6][1:0] == 2'b00);
+        w_addr_3_bank_oh[1]  <= (write_delay_dsp_3[6][1:0] == 2'b01);
+        w_addr_3_bank_oh[2]  <= (write_delay_dsp_3[6][1:0] == 2'b10);
+        w_addr_3_bank_oh[3]  <= (write_delay_dsp_3[6][1:0] == 2'b11);
     end
 
     // =========================================================================
-    // 메인 상태 머신 (FSM)
+    // Main State Machine (FSM)
     // =========================================================================
-    always_ff @(posedge clk or posedge reset) begin
-        if (reset) begin
-            state <= S_IDLE; local_cnt <= '0; done <= '0; i_cnt[0] <= '0; i_cnt[1] <= 4'd1;
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            state <= S_IDLE; state_dsp <= S_IDLE; state_mem <= S_IDLE;
+            local_cnt <= '0; done <= '0; i_cnt[0] <= '0; i_cnt[1] <= 4'd1;
             result <= '0; out_cnt <= '0; final_sub_en <= 1'b0;
             for (int d = 0; d < 4; d++) begin j_cnt[d] <= '0; dsp_active[d] <= 1'b0; end
             j_mux_0 <= '0; j_mux_1 <= '0; j_mux_2 <= '0; j_mux_3 <= '0;
@@ -323,7 +383,7 @@ module mont_multiplier (
             case (state)
                 S_IDLE: begin
                     done <= 1'b0; local_cnt <=1'b0; final_sub_en <= 1'b0;
-                    if (start) state <= S_INIT;
+                    if (start) begin state <= S_INIT; state_dsp <= S_INIT; state_mem <= S_INIT; end
                 end
                 S_INIT: begin
                     if (local_cnt < 5) begin
@@ -332,17 +392,16 @@ module mont_multiplier (
                         local_cnt <= '0; i_cnt[0]  <= '0; i_cnt[1] <= 4'd1; out_cnt <='0;
                         for (int d = 0; d < 4; d++) begin j_cnt[d] <= '0; dsp_active[d] <= 1'b0; end
                         j_mux_0 <= '0; j_mux_1 <= '0; j_mux_2 <= '0; j_mux_3 <= '0;
-                        state <= S_RUNNING;
+                        state <= S_RUNNING; state_dsp <= S_RUNNING; state_mem <= S_RUNNING;
                     end
                 end
                 S_RUNNING: begin
                     local_cnt <= local_cnt + 1;
                     if(local_cnt > 50 && !dsp_active[0] && !dsp_active[1] && !dsp_active[2] && !dsp_active[3]) begin
-                        state <= S_FINAL_SUB;
-                        final_sub_en <= 1'b1; // 🌟 상태 진입 시 초경량 플래그 ON!
+                        state <= S_FINAL_SUB; state_dsp <= S_FINAL_SUB; state_mem <= S_FINAL_SUB;
+                        final_sub_en <= 1'b1; // Lightweight flag ON at state entry!
                     end
-
-                    // DSP FSM 블록
+                    // DSP FSM Block
                     if (dsp_start[0]) begin j_cnt[0] <= '0; j_mux_0 <= '0; dsp_active[0] <= 1'b1; 
                     end else if (dsp_active[0]) begin
                         if(j_cnt[0] == j_max) begin j_cnt[0] <= '0; j_mux_0 <= '0;
@@ -378,20 +437,20 @@ module mont_multiplier (
                             3'b001: begin result[W*4  +: W] <= t_read[0]; result[W*5  +: W] <= t_read[1]; result[W*6  +: W] <= t_read[2]; result[W*7  +: W] <= t_read[3]; out_cnt <= out_cnt + 1; end
                             3'b010: begin result[W*8  +: W] <= t_read[0]; result[W*9  +: W] <= t_read[1]; result[W*10 +: W] <= t_read[2]; result[W*11 +: W] <= t_read[3]; out_cnt <= out_cnt + 1; end
                             3'b011: begin result[W*12 +: W] <= t_read[0]; result[W*13 +: W] <= t_read[1]; result[W*14 +: W] <= t_read[2]; out_cnt <= out_cnt + 1; end
-                            default: begin state <= S_DONE; final_sub_en <= 1'b0; end // 🌟 빠져나갈 때 플래그 OFF
+                            default: begin state <= S_DONE; state_dsp <= S_DONE; state_mem <= S_DONE; final_sub_en <= 1'b0; end // Flag OFF on exit
                         endcase
                     end
                 end
-                S_DONE: begin done <= 1'b1; state <= S_IDLE; end
+                S_DONE: begin done <= 1'b1; state <= S_IDLE; state_dsp <= S_IDLE; state_mem <= S_IDLE; end
             endcase
         end
     end
 
     // =========================================================================
-    // T 배열 메모리 쓰기
+    // T Array Memory Write
     // =========================================================================
     always_ff @(posedge clk) begin
-        if (state == S_INIT) begin 
+        if (state_mem == S_INIT) begin 
             if (local_cnt < 5) begin
                 t_bank_0[local_cnt[2:0]] <= '0; 
                 if (local_cnt < 4) begin        
@@ -399,26 +458,27 @@ module mont_multiplier (
                 end
             end
         end 
-        else if (state == S_RUNNING) begin
-            unique0 if (valid_write_0 && w_addr[0][1:0] == 2'b00) t_bank_0[ w_addr[0][4:2] ] <= dsp_p[0][W-1:0];
-            else if   (valid_write_1 && w_addr[1][1:0] == 2'b00) t_bank_0[ w_addr[1][4:2] ] <= dsp_p[1][W-1:0];
-            else if   (valid_write_2 && w_addr[2][1:0] == 2'b00) t_bank_0[ w_addr[2][4:2] ] <= dsp_p[2][W-1:0];
-            else if   (valid_write_3 && w_addr[3][1:0] == 2'b00) t_bank_0[ w_addr[3][4:2] ] <= dsp_p[3][W-1:0];
+        else if (state_mem == S_RUNNING) begin
+            // [Timing Opt v2] Bank select uses pre-decoded one-hot registers instead of combinational w_addr[d][1:0] == 2'bNN
+            unique0 if (valid_write_0 && w_addr_0_bank_oh[0]) t_bank_0[ w_addr[0][4:2] ] <= dsp_p[0][W-1:0];
+            else if   (valid_write_1_forBank01 && w_addr_1_bank_oh_01[0]) t_bank_0[ w_addr_reg_1_forBank01[4:2] ] <= dsp_p[1][W-1:0];
+            else if   (valid_write_2 && w_addr_2_bank_oh[0]) t_bank_0[ w_addr[2][4:2] ] <= dsp_p[2][W-1:0];
+            else if   (valid_write_3 && w_addr_3_bank_oh[0]) t_bank_0[ w_addr[3][4:2] ] <= dsp_p[3][W-1:0];
 
-            unique0 if (valid_write_0 && w_addr[0][1:0] == 2'b01) t_bank_1[ w_addr[0][4:2] ] <= dsp_p[0][W-1:0];
-            else if   (valid_write_1 && w_addr[1][1:0] == 2'b01) t_bank_1[ w_addr[1][4:2] ] <= dsp_p[1][W-1:0];
-            else if   (valid_write_2 && w_addr[2][1:0] == 2'b01) t_bank_1[ w_addr[2][4:2] ] <= dsp_p[2][W-1:0];
-            else if   (valid_write_3 && w_addr[3][1:0] == 2'b01) t_bank_1[ w_addr[3][4:2] ] <= dsp_p[3][W-1:0];
+            unique0 if (valid_write_0 && w_addr_0_bank_oh[1]) t_bank_1[ w_addr[0][4:2] ] <= dsp_p[0][W-1:0];
+            else if   (valid_write_1_forBank01 && w_addr_1_bank_oh_01[1]) t_bank_1[ w_addr_reg_1_forBank01[4:2] ] <= dsp_p[1][W-1:0];
+            else if   (valid_write_2 && w_addr_2_bank_oh[1]) t_bank_1[ w_addr[2][4:2] ] <= dsp_p[2][W-1:0];
+            else if   (valid_write_3 && w_addr_3_bank_oh[1]) t_bank_1[ w_addr[3][4:2] ] <= dsp_p[3][W-1:0];
 
-            unique0 if (valid_write_0 && w_addr[0][1:0] == 2'b10) t_bank_2[ w_addr[0][4:2] ] <= dsp_p[0][W-1:0];
-            else if   (valid_write_1 && w_addr[1][1:0] == 2'b10) t_bank_2[ w_addr[1][4:2] ] <= dsp_p[1][W-1:0];
-            else if   (valid_write_2 && w_addr[2][1:0] == 2'b10) t_bank_2[ w_addr[2][4:2] ] <= dsp_p[2][W-1:0];
-            else if   (valid_write_3 && w_addr[3][1:0] == 2'b10) t_bank_2[ w_addr[3][4:2] ] <= dsp_p[3][W-1:0];
+            unique0 if (valid_write_0 && w_addr_0_bank_oh[2]) t_bank_2[ w_addr[0][4:2] ] <= dsp_p[0][W-1:0];
+            else if   (valid_write_1_forBank23 && w_addr_1_bank_oh_23[2]) t_bank_2[ w_addr_reg_1_forBank23[4:2] ] <= dsp_p[1][W-1:0];
+            else if   (valid_write_2 && w_addr_2_bank_oh[2]) t_bank_2[ w_addr[2][4:2] ] <= dsp_p[2][W-1:0];
+            else if   (valid_write_3 && w_addr_3_bank_oh[2]) t_bank_2[ w_addr[3][4:2] ] <= dsp_p[3][W-1:0];
 
-            unique0 if (valid_write_0 && w_addr[0][1:0] == 2'b11) t_bank_3[ w_addr[0][4:2] ] <= dsp_p[0][W-1:0];
-            else if   (valid_write_1 && w_addr[1][1:0] == 2'b11) t_bank_3[ w_addr[1][4:2] ] <= dsp_p[1][W-1:0];
-            else if   (valid_write_2 && w_addr[2][1:0] == 2'b11) t_bank_3[ w_addr[2][4:2] ] <= dsp_p[2][W-1:0];
-            else if   (valid_write_3 && w_addr[3][1:0] == 2'b11) t_bank_3[ w_addr[3][4:2] ] <= dsp_p[3][W-1:0];    
+            unique0 if (valid_write_0 && w_addr_0_bank_oh[3]) t_bank_3[ w_addr[0][4:2] ] <= dsp_p[0][W-1:0];
+            else if   (valid_write_1_forBank23 && w_addr_1_bank_oh_23[3]) t_bank_3[ w_addr_reg_1_forBank23[4:2] ] <= dsp_p[1][W-1:0];
+            else if   (valid_write_2 && w_addr_2_bank_oh[3]) t_bank_3[ w_addr[2][4:2] ] <= dsp_p[2][W-1:0];
+            else if   (valid_write_3 && w_addr_3_bank_oh[3]) t_bank_3[ w_addr[3][4:2] ] <= dsp_p[3][W-1:0];    
         end
     end
 endmodule

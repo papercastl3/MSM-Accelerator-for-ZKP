@@ -1,20 +1,20 @@
 `timescale 1ns/1ps
 
 /**
- * ëª¨ë“ˆëª…: AddSub_256 (400MHz Fabric Optimized Word-Serial Version)
- * í•µì‹¬ ìˆ˜ì • ì‚¬í•­:
- * 1. [íƒ€ì´ë° í™•ì •] use_dsp ì†ì„±ì„ ì œê±°í•˜ì—¬ 32ë¹„íŠ¸ ê°€ì‚°ê¸°ë¥¼ ì´ˆê³ ì† CARRY8 íŒ¨ë¸Œë¦­ìœ¼ë¡œ ë§¤í•‘ (ë¡œì§ ì§€ì—° 0.2ns ìˆ˜ì¤€ìœ¼ë¡œ ë‹¨ì¶•, 1í´ë½ ì—°ì‚° ë³´ì¥).
- * 2. [MUX íŠ¸ë¦¬ í•´ì²´] ë³€ìˆ˜ ì¸ë±ì‹±ì„ ê³ ì • [31:0] ë‹¨ë©´ ì°¸ì¡° êµ¬ì¡°ë¡œ ë¦¬ëª¨ë¸ë§í•˜ì—¬ Logic Levelì„ 8ë‹¨ê³„ì—ì„œ 2ë‹¨ê³„ë¡œ ì¶•ì†Œ.
- * 3. [ìƒìˆ˜ ROM ì••ì¶•] N, 2N, 3N ì‹œí”„íŠ¸ ë ˆì§€ìŠ¤í„°(768ë¹„íŠ¸)ë¥¼ ì „ë©´ ì‚­ì œí•˜ê³ , í•˜ë“œì›¨ì–´ ìƒìˆ˜ë¥¼ ì§ì ‘ ì¸ë±ì‹±í•˜ì—¬ LUT-ROM ì§„ë¦¬í‘œë¡œ ì™„ë²½ ì••ì¶•.
- * 4. [ë°ì´í„° ë¬´ê²°ì„±] 8ì‚¬ì´í´ì˜ ì •í™•í•œ 32ë¹„íŠ¸ ìš°ì¸¡ ì›í˜• íšŒì „(Rotation)ì„ í†µí•´ ì—°ì‚° ì™„ë£Œ í›„ ì›ë³¸ ë°ì´í„° ì •ë ¬ ì™„ë²½ ë³µì›.
- * 5. [ë¶€í˜¸ íŒë³„ ìˆ˜ì •] 256ë¹„íŠ¸ ì „ì²´ ìŠ¤ì¼€ì¼ ì‚¬ìš© ì‹œ MSB(ìµœìƒìœ„ ë¹„íŠ¸) í•¨ì •ì„ ë°©ì§€í•˜ê¸° ìœ„í•´ Carry-Out ê¸°ë°˜ì˜ True Borrow íŒë³„ ì ìš©.
+ * ¸ğµâ¸í: AddSub_256 (400MHz Fabric Optimized Word-Serial Version)
+ * ÇÙ½É ¼öÁ¤ »çÇ×:
+ * 1. [Å¸ÀÌ¹Ö È®Á¤] use_dsp ¼Ó¼ºÀ» Á¦°ÅÇÏ¿© 32ºñÆ® °¡»ê±â¸¦ ÃÊ°í¼Ó CARRY8 ÆĞºê¸¯À¸·Î ¸ÅÇÎ (·ÎÁ÷ Áö¿¬ 0.2ns ¼öÁØÀ¸·Î ´ÜÃà, 1Å¬¶ô ¿¬»ê º¸Àå).
+ * 2. [MUX Æ®¸® ÇØÃ¼] º¯¼ö ÀÎµ¦½ÌÀ» °íÁ¤ [31:0] ´Ü¸é ÂüÁ¶ ±¸Á¶·Î ¸®¸ğµ¨¸µÇÏ¿© Logic LevelÀ» 8´Ü°è¿¡¼­ 2´Ü°è·Î Ãà¼Ò.
+ * 3. [»ó¼ö ROM ¾ĞÃà] N, 2N, 3N ½ÃÇÁÆ® ·¹Áö½ºÅÍ(768ºñÆ®)¸¦ Àü¸é »èÁ¦ÇÏ°í, ÇÏµå¿ş¾î »ó¼ö¸¦ Á÷Á¢ ÀÎµ¦½ÌÇÏ¿© LUT-ROM Áø¸®Ç¥·Î ¿Ïº® ¾ĞÃà.
+ * 4. [µ¥ÀÌÅÍ ¹«°á¼º] 8»çÀÌÅ¬ÀÇ Á¤È®ÇÑ 32ºñÆ® ¿ìÃø ¿øÇü È¸Àü(Rotation)À» ÅëÇØ ¿¬»ê ¿Ï·á ÈÄ ¿øº» µ¥ÀÌÅÍ Á¤·Ä ¿Ïº® º¹¿ø.
+ * 5. [ºÎÈ£ ÆÇº° ¼öÁ¤] 256ºñÆ® ÀüÃ¼ ½ºÄÉÀÏ »ç¿ë ½Ã MSB(ÃÖ»óÀ§ ºñÆ®) ÇÔÁ¤À» ¹æÁöÇÏ±â À§ÇØ Carry-Out ±â¹İÀÇ True Borrow ÆÇº° Àû¿ë.
  */
 module AddSub_256 #(
     parameter int TOTAL_W = 256,
     parameter int WORD_W  = 32
 )(
     input  logic                 clk,
-    input  logic                 reset,
+    input  logic                 rst_n,
     input  logic                 start,
     input  logic [1:0]           op_mode,
     input  logic [TOTAL_W-1:0]   A,
@@ -24,36 +24,36 @@ module AddSub_256 #(
 );
 
     // =========================================================================
-    // 1. ì•”í˜¸í•™ì  í”„ë¡œí† ì½œ ìƒìˆ˜ ì„ ì–¸ (BN254 ë² ì´ìŠ¤ í•„ë“œ)
+    // 1. ¾ÏÈ£ÇĞÀû ÇÁ·ÎÅäÄİ »ó¼ö ¼±¾ğ (BN254 º£ÀÌ½º ÇÊµå)
     // =========================================================================
     localparam logic [TOTAL_W-1:0] N       = 256'h30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47;
     localparam logic [TOTAL_W-1:0] TWO_N   = N << 1;
     localparam logic [TOTAL_W-1:0] THREE_N = N + TWO_N;
 
-    localparam int N_WORDS  = TOTAL_W / WORD_W; // 256 / 32 = 8 ì‚¬ì´í´ ë£¨í”„
+    localparam int N_WORDS  = TOTAL_W / WORD_W; // 256 / 32 = 8 »çÀÌÅ¬ ·çÇÁ
     localparam int IDX_W    = $clog2(N_WORDS);
 
     // =========================================================================
-    // 2. FSM ìƒíƒœ ì •ì˜
+    // 2. FSM »óÅÂ Á¤ÀÇ
     // =========================================================================
     typedef enum logic [1:0] {
-        S_IDLE,     // ëŒ€ê¸° ë° ì´ˆê¸°í™”
-        S_PHASE1,   // 1ì°¨ ë©”ì¸ ê°€ê°ì‚° (8ì‚¬ì´í´)
-        S_PHASE2,   // ë²”ìœ„ ë³´ì • ê°€ê°ì‚° (8ì‚¬ì´í´)
-        S_DONE      // ìµœì¢… MUX ì¶œë ¥ ì„ íƒ ë° ì™„ë£Œ í”Œë˜ê·¸ í™œì„±í™” (1ì‚¬ì´í´)
+        S_IDLE,     // ´ë±â ¹× ÃÊ±âÈ­
+        S_PHASE1,   // 1Â÷ ¸ŞÀÎ °¡°¨»ê (8»çÀÌÅ¬)
+        S_PHASE2,   // ¹üÀ§ º¸Á¤ °¡°¨»ê (8»çÀÌÅ¬)
+        S_DONE      // ÃÖÁ¾ MUX Ãâ·Â ¼±ÅÃ ¹× ¿Ï·á ÇÃ·¡±× È°¼ºÈ­ (1»çÀÌÅ¬)
     } state_e;
 
     state_e              state;
-    logic [TOTAL_W-1:0]  a_reg;        // ìˆœí™˜ ì‹œí”„íŠ¸í˜• A ë ˆì§€ìŠ¤í„° (8íšŒì „ í›„ ë³µì›)
-    logic [TOTAL_W-1:0]  b_reg;        // ìˆœí™˜ ì‹œí”„íŠ¸í˜• B ë ˆì§€ìŠ¤í„° (8íšŒì „ í›„ ë³µì›)
-    logic [TOTAL_W-1:0]  base_res;     // Phase 1 ìŠ¤íŠ¸ë¦¬ë° ê²°ê³¼ ëˆ„ì  ë ˆì§€ìŠ¤í„°
-    logic                carry_ff;     // ì›Œë“œ ê°„ ê³ ì† ìºë¦¬ ì „íŒŒ í”Œë¦½í”Œë¡­
-    logic [IDX_W-1:0]    word_idx;     // ë£¨í”„ ì¹´ìš´í„° (Fanout í•´ì œ ì™„ë£Œ)
+    logic [TOTAL_W-1:0]  a_reg;        // ¼øÈ¯ ½ÃÇÁÆ®Çü A ·¹Áö½ºÅÍ (8È¸Àü ÈÄ º¹¿ø)
+    logic [TOTAL_W-1:0]  b_reg;        // ¼øÈ¯ ½ÃÇÁÆ®Çü B ·¹Áö½ºÅÍ (8È¸Àü ÈÄ º¹¿ø)
+    logic [TOTAL_W-1:0]  base_res;     // Phase 1 ½ºÆ®¸®¹Ö °á°ú ´©Àû ·¹Áö½ºÅÍ
+    logic                carry_ff;     // ¿öµå °£ °í¼Ó Ä³¸® ÀüÆÄ ÇÃ¸³ÇÃ·Ó
+    logic [IDX_W-1:0]    word_idx;     // ·çÇÁ Ä«¿îÅÍ (Fanout ÇØÁ¦ ¿Ï·á)
     logic [1:0]          op_reg;       
-    logic                sign_p1;      // Phase 1 ê²°ê³¼ì˜ Borrow(ì–¸ë”í”Œë¡œìš°) ë˜ì¹˜ìš© í”Œë˜ê·¸
+    logic                sign_p1;      // Phase 1 °á°úÀÇ Borrow(¾ğ´õÇÃ·Î¿ì) ·¡Ä¡¿ë ÇÃ·¡±×
 
     // =========================================================================
-    // 3. ì¡°í•© ë…¼ë¦¬: 32ë¹„íŠ¸ ê³ ì • ìŠ¬ë¡¯ ê³µìœ  íŒ¨ë¸Œë¦­ ì—°ì‚°ê¸°
+    // 3. Á¶ÇÕ ³í¸®: 32ºñÆ® °íÁ¤ ½½·Ô °øÀ¯ ÆĞºê¸¯ ¿¬»ê±â
     // =========================================================================
     logic [WORD_W-1:0] adder_a;
     logic [WORD_W-1:0] adder_b_raw;
@@ -61,7 +61,7 @@ module AddSub_256 #(
     logic [WORD_W-1:0] eff_b;
     logic              carry_in;
     
-    // ğŸŒŸ use_dsp ì†ì„± ì œê±° -> ê³ ì† ìºë¦¬ì²´ì¸(CARRY8) ë§¤í•‘ ìœ ë„í•˜ì—¬ 400MHz íƒ€ì´ë° íŒ¨ìŠ¤ í™•ì •
+    // ? use_dsp ¼Ó¼º Á¦°Å -> °í¼Ó Ä³¸®Ã¼ÀÎ(CARRY8) ¸ÅÇÎ À¯µµÇÏ¿© 400MHz Å¸ÀÌ¹Ö ÆĞ½º È®Á¤
     logic [WORD_W:0]   adder_out;
 
     always_comb begin
@@ -71,14 +71,14 @@ module AddSub_256 #(
 
         case (state)
             S_PHASE1: begin
-                // ë³€ìˆ˜ ìŠ¬ë¼ì´ì‹± ì œê±°: ì–¸ì œë‚˜ ìµœí•˜ìœ„ 32ë¹„íŠ¸ ê³ ì •ë©´ ì°¸ì¡°
+                // º¯¼ö ½½¶óÀÌ½Ì Á¦°Å: ¾ğÁ¦³ª ÃÖÇÏÀ§ 32ºñÆ® °íÁ¤¸é ÂüÁ¶
                 adder_a = a_reg[WORD_W-1:0]; 
                 
                 case (op_reg)
                     2'b00: begin adder_b_raw = b_reg[WORD_W-1:0]; do_sub = 1'b0; end // A + B
                     2'b01: begin adder_b_raw = b_reg[WORD_W-1:0]; do_sub = 1'b1; end // A - B (mod 2N)
                     2'b10: begin adder_b_raw = b_reg[WORD_W-1:0]; do_sub = 1'b1; end // A - B (mod 3N)
-                    // ìƒìˆ˜ë¥¼ ì§ì ‘ ì›Œë“œ ë‹¨ìœ„ ìŠ¬ë¼ì´ì‹±í•˜ë©´ ë¹„ë°”ë„ê°€ ë§¤ìš° íš¨ìœ¨ì ì¸ ì†Œí˜• LUT-ROMìœ¼ë¡œ í•©ì„±í•©ë‹ˆë‹¤.
+                    // »ó¼ö¸¦ Á÷Á¢ ¿öµå ´ÜÀ§ ½½¶óÀÌ½ÌÇÏ¸é ºñ¹Ùµµ°¡ ¸Å¿ì È¿À²ÀûÀÎ ¼ÒÇü LUT-ROMÀ¸·Î ÇÕ¼ºÇÕ´Ï´Ù.
                     2'b11: begin adder_b_raw = N[word_idx*WORD_W +: WORD_W]; do_sub = 1'b1; end // A - N
                     default: ;
                 endcase
@@ -86,24 +86,24 @@ module AddSub_256 #(
             
             S_PHASE2: begin
                 adder_a     = base_res[WORD_W-1:0];
-                // ëŒ€í˜• ìƒìˆ˜ë¥¼ í•„ìš”í•œ í¬ì…˜ë§Œ ì¡°í•©íšŒë¡œ MUXë¡œ ì§ì ‘ ì ì¬
+                // ´ëÇü »ó¼ö¸¦ ÇÊ¿äÇÑ Æ÷¼Ç¸¸ Á¶ÇÕÈ¸·Î MUX·Î Á÷Á¢ ÀûÀç
                 adder_b_raw = (op_reg == 2'b10) ? THREE_N[word_idx*WORD_W +: WORD_W] : TWO_N[word_idx*WORD_W +: WORD_W];
-                do_sub      = (op_reg == 2'b00);  // Lazy Addë©´ -2N(Sub), Lazy Subë©´ +2N/+3N(Add)
+                do_sub      = (op_reg == 2'b00);  // Lazy Add¸é -2N(Sub), Lazy Sub¸é +2N/+3N(Add)
             end
             default: ;
         endcase
 
-        // 32ë¹„íŠ¸ íŒ¨ë¸Œë¦­ ê°€ì‚°ê¸° ë°ì´í„° íŒ¨ìŠ¤
+        // 32ºñÆ® ÆĞºê¸¯ °¡»ê±â µ¥ÀÌÅÍ ÆĞ½º
         eff_b     = do_sub ? ~adder_b_raw : adder_b_raw;
         carry_in  = (word_idx == '0) ? do_sub : carry_ff;
         adder_out = {1'b0, adder_a} + {1'b0, eff_b} + {{WORD_W{1'b0}}, carry_in};
     end
 
     // =========================================================================
-    // 4. ìˆœì°¨ ì œì–´ ë° ìš°ì¸¡ ìˆœí™˜ íšŒì „(Rotation) ì—”ì§„
+    // 4. ¼øÂ÷ Á¦¾î ¹× ¿ìÃø ¼øÈ¯ È¸Àü(Rotation) ¿£Áø
     // =========================================================================
-    always_ff @(posedge clk or posedge reset) begin
-        if (reset) begin
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
             state <= S_IDLE; result <= '0; done <= 1'b0;
             a_reg <= '0; b_reg <= '0; base_res <= '0; carry_ff <= 1'b0;
             word_idx <= '0; op_reg <= 2'b00; sign_p1 <= 1'b0;
@@ -122,22 +122,22 @@ module AddSub_256 #(
                 end
 
                 S_PHASE1: begin
-                    // ì›í˜• íšŒì „(Rotation Shift): í•˜ìœ„ 32ë¹„íŠ¸ë¥¼ ìƒìœ„ë¡œ ìˆœí™˜ ì´ë™
-                    // ì •í™•íˆ 8ì‚¬ì´í´ íšŒì „ í›„ ì›ë³¸ ë¹„íŠ¸ ì •ë ¬ ìƒíƒœê°€ ì™„ë²½íˆ ì œìë¦¬ë¡œ ëŒì•„ì˜µë‹ˆë‹¤.
+                    // ¿øÇü È¸Àü(Rotation Shift): ÇÏÀ§ 32ºñÆ®¸¦ »óÀ§·Î ¼øÈ¯ ÀÌµ¿
+                    // Á¤È®È÷ 8»çÀÌÅ¬ È¸Àü ÈÄ ¿øº» ºñÆ® Á¤·Ä »óÅÂ°¡ ¿Ïº®È÷ Á¦ÀÚ¸®·Î µ¹¾Æ¿É´Ï´Ù.
                     a_reg <= {a_reg[WORD_W-1:0], a_reg[TOTAL_W-1:WORD_W]};
                     b_reg <= {b_reg[WORD_W-1:0], b_reg[TOTAL_W-1:WORD_W]};
 
-                    // ê²°ê³¼ ì ì¬: ìµœìƒìœ„ ë¹„íŠ¸(MSB) ë°©í–¥ì—ì„œ ë°€ì–´ ë„£ì–´ ë¦¬í‹€ ì—”ë””ì•ˆ ì •ë ¬ ì™„ë£Œ
+                    // °á°ú ÀûÀç: ÃÖ»óÀ§ ºñÆ®(MSB) ¹æÇâ¿¡¼­ ¹Ğ¾î ³Ö¾î ¸®Æ² ¿£µğ¾È Á¤·Ä ¿Ï·á
                     base_res <= {adder_out[WORD_W-1:0], base_res[TOTAL_W-1:WORD_W]};
                     carry_ff <= adder_out[WORD_W];
 
                     if (word_idx == IDX_W'(N_WORDS - 1)) begin
-                        // [ìˆ˜ì •ëœ ë¶€ë¶„] MSB ë¹„íŠ¸ ëŒ€ì‹  ê°€ì‚°ê¸° ìµœìƒë‹¨ Carry-Outì„ ë°˜ì „ì‹œì¼œ í™•ì‹¤í•œ Borrow íŒë…
+                        // [¼öÁ¤µÈ ºÎºĞ] MSB ºñÆ® ´ë½Å °¡»ê±â ÃÖ»ó´Ü Carry-OutÀ» ¹İÀü½ÃÄÑ È®½ÇÇÑ Borrow ÆÇµ¶
                         sign_p1  <= ~adder_out[WORD_W];
                         word_idx <= '0;
                         
                         if (op_reg == 2'b11) begin
-                            state <= S_DONE; // Final SubëŠ” Phase 2 ìƒëµí•˜ê³  ì´ˆê³ ì† íŒ¨ìŠ¤íƒˆì¶œ
+                            state <= S_DONE; // Final Sub´Â Phase 2 »ı·«ÇÏ°í ÃÊ°í¼Ó ÆĞ½ºÅ»Ãâ
                         end else begin
                             carry_ff <= 1'b0;
                             state    <= S_PHASE2;
@@ -148,10 +148,10 @@ module AddSub_256 #(
                 end
 
                 S_PHASE2: begin
-                    // base_resë„ í•¨ê»˜ íšŒì „ ì‹œì¼œ S_DONE íƒ€ì´ë°ì— ì›ë³¸ ìœ„ì¹˜ ì™„ë²½ ë™ê¸°í™”
+                    // base_resµµ ÇÔ²² È¸Àü ½ÃÄÑ S_DONE Å¸ÀÌ¹Ö¿¡ ¿øº» À§Ä¡ ¿Ïº® µ¿±âÈ­
                     base_res <= {base_res[WORD_W-1:0], base_res[TOTAL_W-1:WORD_W]};
 
-                    // êµì •ëœ ìµœì¢… ì—°ì‚° ê²°ê³¼ ì°¨ê³¡ì°¨ê³¡ ì ì¬
+                    // ±³Á¤µÈ ÃÖÁ¾ ¿¬»ê °á°ú Â÷°îÂ÷°î ÀûÀç
                     result   <= {adder_out[WORD_W-1:0], result[TOTAL_W-1:WORD_W]};
                     carry_ff <= adder_out[WORD_W];
 
@@ -165,18 +165,18 @@ module AddSub_256 #(
 
                 S_DONE: begin
                     case (op_reg)
-                        2'b00: begin // Lazy Add ì¡°ê±´ ë¶„ê¸°
-                            // [ìˆ˜ì •ëœ ë¶€ë¶„] Phase 2 ê²°ê³¼ì˜ MSBê°€ ì•„ë‹Œ Carry-Out(~carry_ff)ì„ í†µí•´ Borrow ë°œìƒ ê²€ì‚¬
+                        2'b00: begin // Lazy Add Á¶°Ç ºĞ±â
+                            // [¼öÁ¤µÈ ºÎºĞ] Phase 2 °á°úÀÇ MSB°¡ ¾Æ´Ñ Carry-Out(~carry_ff)À» ÅëÇØ Borrow ¹ß»ı °Ë»ç
                             if (~carry_ff) result <= base_res;
                         end
                         
-                        2'b01, 2'b10: begin // Lazy Sub ì¡°ê±´ ë¶„ê¸°
-                            // Phase 1ì—ì„œ Borrowê°€ ë°œìƒí•˜ì§€ ì•Šì•˜ë‹¤ë©´(!sign_p1) ë³´ì • ë¶ˆí•„ìš”í•˜ë¯€ë¡œ ì›ë³¸ base_res ë³µì›
+                        2'b01, 2'b10: begin // Lazy Sub Á¶°Ç ºĞ±â
+                            // Phase 1¿¡¼­ Borrow°¡ ¹ß»ıÇÏÁö ¾Ê¾Ò´Ù¸é(!sign_p1) º¸Á¤ ºÒÇÊ¿äÇÏ¹Ç·Î ¿øº» base_res º¹¿ø
                             if (!sign_p1) result <= base_res;
                         end
                         
-                        2'b11: begin // Final Sub ì¡°ê±´ ë¶„ê¸°
-                            // A - N < 0 (Borrow ë°œìƒ, sign_p1=1) ì´ë©´ ì™„ë²½íˆ íšŒì „ ì›ë³µëœ ì›ë³¸ A(a_reg) ìœ ì§€, ì–‘ìˆ˜ë©´ base_res ì¶œë ¥
+                        2'b11: begin // Final Sub Á¶°Ç ºĞ±â
+                            // A - N < 0 (Borrow ¹ß»ı, sign_p1=1) ÀÌ¸é ¿Ïº®È÷ È¸Àü ¿øº¹µÈ ¿øº» A(a_reg) À¯Áö, ¾ç¼ö¸é base_res Ãâ·Â
                             result <= sign_p1 ? a_reg : base_res;
                         end
                         default: result <= base_res;

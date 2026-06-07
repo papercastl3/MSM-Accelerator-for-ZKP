@@ -2,7 +2,7 @@
 
 module ECC_point_adder(
     input  logic         clk,
-    input  logic         reset,
+    input  logic         rst_n,
     input  logic         start,
     input  logic [254:0] x1,
     input  logic [254:0] y1,
@@ -17,7 +17,7 @@ module ECC_point_adder(
 );
 
     // ==========================================
-    // 1. 메모리 맵 정의 
+    // 1.  ޸          
     // ==========================================
     localparam M_X1 = 4'd0, M_Y1 = 4'd1, M_Z1 = 4'd2;
     localparam M_X2 = 4'd3, M_Y2 = 4'd4, M_Z2 = 4'd5;
@@ -50,7 +50,7 @@ module ECC_point_adder(
     end
 
     // ==========================================
-    // 3. 연산기 및 제어 신호
+    // 3.                 ȣ
     // ==========================================
     logic [255:0] mul_a_x_reg, mul_a_y_reg;
     logic [255:0] mul_b_x_reg, mul_b_y_reg;
@@ -66,28 +66,36 @@ module ECC_point_adder(
     logic h_is_zero_reg;
     logic r_is_zero_reg;
 
+    // Input capture registers.
+    // These cut the long timing path from the upper controller input registers
+    // through the 255-bit zero checks into the local FSM/write-enable logic.
+    logic [254:0] x1_q, y1_q, z1_q;
+    logic [254:0] x2_q, y2_q, z2_q;
+    logic         z1_is_zero_q;
+    logic         z2_is_zero_q;
+
     mont_multiplier mul_a (
-        .clk(clk), .reset(reset), .start(mul_a_start),
+        .clk(clk), .rst_n(rst_n), .start(mul_a_start),
         .X(mul_a_x_reg[254:0]), .Y(mul_a_y_reg[254:0]),
         .result(mul_a_result), .done(mul_a_done)
     );
 
     mont_multiplier mul_b (
-        .clk(clk), .reset(reset), .start(mul_b_start),
+        .clk(clk), .rst_n(rst_n), .start(mul_b_start),
         .X(mul_b_x_reg[254:0]), .Y(mul_b_y_reg[254:0]),
         .result(mul_b_result), .done(mul_b_done)
     );
 
     AddSub_256 au (
-        .clk(clk), .reset(reset), .start(au_start), .op_mode(au_op_mode),
+        .clk(clk), .rst_n(rst_n), .start(au_start), .op_mode(au_op_mode),
         .A(au_a_reg), .B(au_b_reg), .result(au_result), .done(au_done)
     );
 
     // ==========================================
-    // 4. 주소 기반 메인 FSM 
+    // 4.  ּ           FSM 
     // ==========================================
     typedef enum logic [7:0] {
-        ST_IDLE, ST_LOAD_0, ST_LOAD_1,
+        ST_IDLE, ST_CHECK_INPUT, ST_LOAD_0, ST_LOAD_1,
         
         MA_ST0_FETCH_0, MA_ST0_WAIT_1, MA_ST0_WAIT_2, MA_ST0_LATCH_0, MA_ST0_MUL_WAIT_0,
         
@@ -130,47 +138,145 @@ module ECC_point_adder(
 
     state_e state;
 
-    always_ff @(posedge clk) begin
-        if (reset) begin
+    // ------------------------------------------------------------
+    // Output commit buffer
+    //
+    // The previous implementation assigned x3/y3/z3 directly from many
+    // FSM states. Vivado then built wide CE nets from state/control logic
+    // to x3/y3/z3 registers, causing high-fanout timing paths.
+    //
+    // This buffer stages the selected result first, then commits it to the
+    // output registers one cycle later with 64-bit grouped enables.
+    // ------------------------------------------------------------
+    logic [254:0] x3_buf;
+    logic [254:0] y3_buf;
+    logic [254:0] z3_buf;
+
+    logic [3:0] x3_load_g;
+    logic [3:0] y3_load_g;
+    logic [3:0] z3_load_g;
+
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
             state <= ST_IDLE; done <= 1'b0;
             h_is_zero_reg <= 1'b0; r_is_zero_reg <= 1'b0;
+            z1_is_zero_q <= 1'b0; z2_is_zero_q <= 1'b0;
+            x1_q <= '0; y1_q <= '0; z1_q <= '0;
+            x2_q <= '0; y2_q <= '0; z2_q <= '0;
             mul_a_start <= 0; mul_b_start <= 0; au_start <= 0;
             wea <= 0; web <= 0; v_reg <= '0;
             x3 <= '0; y3 <= '0; z3 <= '0;
+            x3_buf <= '0; y3_buf <= '0; z3_buf <= '0;
+            x3_load_g <= 4'b0000;
+            y3_load_g <= 4'b0000;
+            z3_load_g <= 4'b0000;
         end 
         else begin
-            mul_a_start <= 0; mul_b_start <= 0; au_start <= 0;
-            wea <= 0; web <= 0;
+            mul_a_start <= 1'b0;
+            mul_b_start <= 1'b0;
+            au_start    <= 1'b0;
+            wea         <= 1'b0;
+            web         <= 1'b0;
+
+            // Commit output buffers requested on the previous cycle.
+            if (x3_load_g[0]) x3[63:0]    <= x3_buf[63:0];
+            if (x3_load_g[1]) x3[127:64]  <= x3_buf[127:64];
+            if (x3_load_g[2]) x3[191:128] <= x3_buf[191:128];
+            if (x3_load_g[3]) x3[254:192] <= x3_buf[254:192];
+
+            if (y3_load_g[0]) y3[63:0]    <= y3_buf[63:0];
+            if (y3_load_g[1]) y3[127:64]  <= y3_buf[127:64];
+            if (y3_load_g[2]) y3[191:128] <= y3_buf[191:128];
+            if (y3_load_g[3]) y3[254:192] <= y3_buf[254:192];
+
+            if (z3_load_g[0]) z3[63:0]    <= z3_buf[63:0];
+            if (z3_load_g[1]) z3[127:64]  <= z3_buf[127:64];
+            if (z3_load_g[2]) z3[191:128] <= z3_buf[191:128];
+            if (z3_load_g[3]) z3[254:192] <= z3_buf[254:192];
+
+            // Default: no new output commit request.
+            x3_load_g <= 4'b0000;
+            y3_load_g <= 4'b0000;
+            z3_load_g <= 4'b0000;
 
             case (state)
                 ST_IDLE: begin
                     done <= 1'b0;
-                    h_is_zero_reg <= 1'b0; r_is_zero_reg <= 1'b0;
+                    h_is_zero_reg <= 1'b0;
+                    r_is_zero_reg <= 1'b0;
+
                     if (start) begin
-                        if (z2 == 255'd0) begin
-                            x3 <= x1; y3 <= y1; z3 <= z1;
-                            state <= S_DONE;
-                        end 
-                        else if (z1 == 255'd0) begin
-                            x3 <= x2; y3 <= y2; z3 <= z2;
-                            state <= S_DONE;
-                        end 
-                        else begin
-                            wea <= 1; addra <= M_X1; dina <= {1'b0, x1};
-                            web <= 1; addrb <= M_Y1; dinb <= {1'b0, y1};
-                            state <= ST_LOAD_0;
-                        end
+                        x1_q <= x1;
+                        y1_q <= y1;
+                        z1_q <= z1;
+
+                        x2_q <= x2;
+                        y2_q <= y2;
+                        z2_q <= z2;
+
+                        z1_is_zero_q <= (z1 == 255'd0);
+                        z2_is_zero_q <= (z2 == 255'd0);
+
+                        state <= ST_CHECK_INPUT;
                     end
                 end
-                ST_LOAD_0: begin 
-                    wea <= 1; addra <= M_Z2; dina <= {1'b0, z2};
-                    web <= 1; addrb <= M_2Y1; dinb <= {y1, 1'b0};
-                    state <= ST_LOAD_1; 
+
+                ST_CHECK_INPUT: begin
+                    if (z2_is_zero_q) begin
+                        x3_buf <= x1_q;
+                        y3_buf <= y1_q;
+                        z3_buf <= z1_q;
+
+                        x3_load_g <= 4'b1111;
+                        y3_load_g <= 4'b1111;
+                        z3_load_g <= 4'b1111;
+
+                        state <= S_DONE;
+                    end else if (z1_is_zero_q) begin
+                        x3_buf <= x2_q;
+                        y3_buf <= y2_q;
+                        z3_buf <= z2_q;
+
+                        x3_load_g <= 4'b1111;
+                        y3_load_g <= 4'b1111;
+                        z3_load_g <= 4'b1111;
+
+                        state <= S_DONE;
+                    end else begin
+                        wea   <= 1'b1;
+                        addra <= M_X1;
+                        dina  <= {1'b0, x1_q};
+
+                        web   <= 1'b1;
+                        addrb <= M_Y1;
+                        dinb  <= {1'b0, y1_q};
+
+                        state <= ST_LOAD_0;
+                    end
                 end
-                ST_LOAD_1: begin    
-                    wea <= 1; addra <= M_X2; dina <= {1'b0, x2};
-                    web <= 1; addrb <= M_Y2; dinb <= {1'b0, y2};
-                    state <= MA_ST0_FETCH_0; 
+
+                ST_LOAD_0: begin
+                    wea   <= 1'b1;
+                    addra <= M_Z2;
+                    dina  <= {1'b0, z2_q};
+
+                    web   <= 1'b1;
+                    addrb <= M_2Y1;
+                    dinb  <= {y1_q, 1'b0};
+
+                    state <= ST_LOAD_1;
+                end
+
+                ST_LOAD_1: begin
+                    wea   <= 1'b1;
+                    addra <= M_X2;
+                    dina  <= {1'b0, x2_q};
+
+                    web   <= 1'b1;
+                    addrb <= M_Y2;
+                    dinb  <= {1'b0, y2_q};
+
+                    state <= MA_ST0_FETCH_0;
                 end
 
                 MA_ST0_FETCH_0: begin addra <= M_Z2; state <= MA_ST0_WAIT_1; end
@@ -205,7 +311,7 @@ module ECC_point_adder(
                 MA_ST1_AU_WAIT_0: begin
                     if (au_done) begin
                         au_a_reg <= au_result;
-                        au_b_reg <= '0; // 명시적 0 초기화
+                        au_b_reg <= '0; //        0  ʱ ȭ
                         au_op_mode <= 2'b11; // H - N (N)
                         au_start <= 1;
                         state <= MA_ST1_AU_WAIT_1;
@@ -236,7 +342,7 @@ module ECC_point_adder(
                 MA_ST2_AU_WAIT_0: begin
                     if (au_done) begin
                         au_a_reg <= au_result; 
-                        au_b_reg <= '0; // 명시적 0 초기화
+                        au_b_reg <= '0; //        0  ʱ ȭ
                         au_op_mode <= 2'b11; // r - N (N)
                         au_start <= 1;
                         state <= MA_ST2_AU_WAIT_1;
@@ -260,7 +366,17 @@ module ECC_point_adder(
                 MA_ST3_FETCH_0: begin 
                     if (h_is_zero_reg) begin
                         if (r_is_zero_reg) state <= S_LOAD_DBL_0; 
-                        else begin x3 <= '0; y3 <= '0; z3 <= '0; state <= S_DONE; end
+                        else begin
+                            x3_buf <= 255'd0;
+                            y3_buf <= 255'd0;
+                            z3_buf <= 255'd0;
+
+                            x3_load_g <= 4'b1111;
+                            y3_load_g <= 4'b1111;
+                            z3_load_g <= 4'b1111;
+
+                            state <= S_DONE;
+                        end
                     end else begin
                         addra <= M_Z2; addrb <= M_T3; 
                         state <= MA_ST3_FETCH_1; 
@@ -275,7 +391,7 @@ module ECC_point_adder(
                     if (mul_a_done && mul_b_done) begin
                         wea <= 1; addra <= M_T0; dina <= {1'b0, mul_a_result}; // Z3 
                         au_a_reg <= {1'b0, mul_b_result}; 
-                        au_b_reg <= '0; // 명시적 0 초기화
+                        au_b_reg <= '0; //        0  ʱ ȭ
                         au_op_mode <= 2'b11; au_start <= 1; // H_cubed - N (N)
                         state <= MA_ST3_AU_WAIT_0;
                     end
@@ -296,7 +412,7 @@ module ECC_point_adder(
                     if (mul_a_done && mul_b_done) begin
                         wea <= 1; addra <= M_T5; dina <= {1'b0, mul_b_result}; // r_square
                         au_a_reg <= {1'b0, mul_a_result}; 
-                        au_b_reg <= '0; // 명시적 0 초기화
+                        au_b_reg <= '0; //        0  ʱ ȭ
                         au_op_mode <= 2'b11; au_start <= 1; // V - N (N)
                         state <= MA_ST4_AU_WAIT_0;
                     end
@@ -336,14 +452,15 @@ module ECC_point_adder(
                 end
                 MA_ST5_WAIT_3: begin
                     if (au_done) begin
-                        au_a_reg <= au_result; au_b_reg <= '0; // 명시적 0 초기화
+                        au_a_reg <= au_result; au_b_reg <= '0; //        0  ʱ ȭ
                         au_op_mode <= 2'b11; au_start <= 1; // X3_temp - N (N) 
                         state <= MA_ST5_WAIT_4;
                     end
                 end
                 MA_ST5_WAIT_4: begin
                     if (au_done) begin
-                        x3 <= au_result[254:0]; // Final X3 out
+                        x3_buf    <= au_result[254:0]; // Final X3 out
+                        x3_load_g <= 4'b1111;
                         wea <= 1; addra <= M_T3; dina <= au_result; // Write X3
                         au_a_reg <= v_reg; au_b_reg <= au_result;
                         au_op_mode <= 2'b01; au_start <= 1; // V - X3 (2N) 
@@ -370,7 +487,7 @@ module ECC_point_adder(
                     if (mul_a_done && mul_b_done) begin
                         v_reg <= mul_b_result; 
                         au_a_reg <= {1'b0, mul_a_result}; 
-                        au_b_reg <= '0; // 명시적 0 초기화
+                        au_b_reg <= '0; //        0  ʱ ȭ
                         au_start <= 1; au_op_mode <= 2'b11; // W - N (N)
                         state <= MA_ST6_AU_WAIT_0;
                     end
@@ -385,14 +502,15 @@ module ECC_point_adder(
                 MA_ST6_AU_WAIT_1: begin
                     if (au_done) begin
                         au_a_reg <= au_result; 
-                        au_b_reg <= '0; // 명시적 0 초기화
+                        au_b_reg <= '0; //        0  ʱ ȭ
                         au_op_mode <= 2'b11; au_start <= 1; // Y3_temp - N (N)
                         state <= MA_ST6_AU_WAIT_2;
                     end
                 end
                 MA_ST6_AU_WAIT_2: begin
                     if (au_done) begin
-                        y3 <= au_result[254:0]; // Final Y3 out
+                        y3_buf    <= au_result[254:0]; // Final Y3 out
+                        y3_load_g <= 4'b1111;
                         state <= MA_ST7_FETCH_0;
                     end
                 end
@@ -402,22 +520,23 @@ module ECC_point_adder(
                 MA_ST7_WAIT_1:  begin state <= MA_ST7_LATCH_0; end
                 MA_ST7_LATCH_0: begin
                     au_a_reg <= douta; 
-                    au_b_reg <= '0; // 명시적 0 초기화
+                    au_b_reg <= '0; //        0  ʱ ȭ
                     au_op_mode <= 2'b11; au_start <= 1; // Z3 - N
                     state <= MA_ST7_AU_WAIT_0;
                 end
                 MA_ST7_AU_WAIT_0: begin
                     if (au_done) begin 
-                        z3 <= au_result[254:0]; // Final Z3 out
+                        z3_buf    <= au_result[254:0]; // Final Z3 out
+                        z3_load_g <= 4'b1111;
                         state <= S_DONE; 
                     end 
                 end
 
                 // =========================================================================
-                // [Doubling 경로]
+                // [Doubling    ]
                 // =========================================================================
                 S_LOAD_DBL_0: begin
-                    wea <= 1; addra <= M_T0; dina <= {y1, 1'b0}; 
+                    wea <= 1; addra <= M_T0; dina <= {y1_q, 1'b0}; 
                     state <= S_LOAD_DBL_1;
                 end
                 S_LOAD_DBL_1: begin
@@ -593,8 +712,22 @@ module ECC_point_adder(
                 S_O_F0: begin addra <= M_T2; addrb <= M_T1; state <= S_O_F1; end
                 S_O_F1: begin addra <= M_T0; state <= S_O_WX; end
                 S_O_WX: state <= S_O_L0;
-                S_O_L0: begin x3 <= douta[254:0]; y3 <= doutb[254:0]; state <= S_O_L1; end 
-                S_O_L1: begin z3 <= douta[254:0]; state <= S_DONE; end
+                S_O_L0: begin
+                    x3_buf <= douta[254:0];
+                    y3_buf <= doutb[254:0];
+
+                    x3_load_g <= 4'b1111;
+                    y3_load_g <= 4'b1111;
+
+                    state <= S_O_L1;
+                end
+
+                S_O_L1: begin
+                    z3_buf <= douta[254:0];
+                    z3_load_g <= 4'b1111;
+
+                    state <= S_DONE;
+                end
 
                 S_DONE: begin
                     done <= 1'b1;
