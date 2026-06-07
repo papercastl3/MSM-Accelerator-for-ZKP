@@ -1,1 +1,1 @@
-we modified an opensource library "libsnark" and "libff".
+we modified an opensource library "libsnark" and "libff"..
