@@ -6,6 +6,7 @@
 
 > Target curve: **ALT-BN128 (BN254)** · Board: **AMD Kria KR260 (Zynq UltraScale+ MPSoC)** · Clock: **100 MHz** · Power: **~4.5 W**
 ---
+<img width="707" height="418" alt="image" src="https://github.com/user-attachments/assets/38c3926b-f97e-4516-bae0-ef968652a455" />
 
 ## Table of Contents
 - [Motivation](#motivation)
