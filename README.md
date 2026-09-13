@@ -141,37 +141,6 @@ The goal here is **efficiency per dollar and per watt on an edge-class board**, 
 └── etc/            # Misc / helper files
 ```
 
-## Build & Run
-
-> The exact toolchain versions and paths are environment-specific; the flow below is the intended high-level sequence. See each subdirectory for details.
-
-**Prerequisites**
-- AMD Vivado / Vitis (SoC-FPGA build)
-- AMD Kria KR260 with a PetaLinux / Ubuntu image
-- CMake, a C++17 toolchain (for the golden model and host app)
-
-**1. Build & simulate the RTL**
-```bash
-# Open the project in Vivado and run the Zynq VIP testbench in test_bench/,
-# or use the provided scripts to run RTL simulation against golden_model/.
-```
-
-**2. Synthesize the bitstream**
-```bash
-# Synthesize/implement accelerator/ for the KR260 target and export the bitstream + hardware handoff.
-```
-
-**3. Build the golden model / host app**
-```bash
-cmake -S . -B build
-cmake --build build
-```
-
-**4. Load the driver and run on-board**
-```bash
-# Program the PL, insmod the driver in driver/, then run the host application
-# to stream points/scalars over DMA and compare FPGA output against the golden model.
-```
 
 ## References
 
